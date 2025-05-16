@@ -1,0 +1,297 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="h4 mb-0">Adicionar Novo Lead</h2>
+                    <a href="{{ url_for('menu') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar ao Menu
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if sucesso %}
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle-fill"></i> Lead adicionado com sucesso!
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endif %}
+                    {% if erro %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ erro }}
+                    </div>
+                    {% endif %}
+                    <form method="POST" id="leadForm" novalidate>
+                        <div class="mb-3">
+                            <label class="form-label">Nome do Responsável</label>
+                            <input name="responsavel" type="text" class="form-control" 
+                                value="{{ dados.responsavel if dados else '' }}"
+                                pattern="^[A-Za-zÀ-ÿ\s]{3,}$" />
+                            <div class="invalid-feedback">
+                                O nome do responsável deve conter apenas letras e ter no mínimo 3 caracteres.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Número de Telefone <span class="text-danger">*</span></label>
+                            <input name="numero" type="tel" class="form-control" 
+                                value="{{ dados.numero if dados else '' }}"
+                                pattern="^\(\d{2}\)\s?9?\d{4}-?\d{4}$"
+                                required />
+                            <div class="invalid-feedback">
+                                Digite um número de telefone válido no formato (99)99999-9999
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Data de Contato <span class="text-danger">*</span></label>
+                            <input name="data_contato" class="form-control" 
+                                value="{{ dados.data_contato if dados else '' }}"
+                                required />
+                            <div class="invalid-feedback">
+                                Digite 'hoje' ou uma data no formato DD/MM/AAAA
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nome do Aluno</label>
+                            <input name="aluno" type="text" class="form-control" 
+                                value="{{ dados.aluno if dados else '' }}"
+                                pattern="^[A-Za-zÀ-ÿ\s]{3,}$" />
+                            <div class="invalid-feedback">
+                                O nome do aluno deve conter apenas letras e ter no mínimo 3 caracteres.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Idade do Aluno</label>
+                            <input name="idade" type="number" class="form-control" 
+                                value="{{ dados.idade if dados else '' }}"
+                                min="4" max="99" />
+                            <div class="invalid-feedback">
+                                A idade deve ser um número entre 4 e 99 anos.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Curso</label>
+                            <select name="curso" class="form-select">
+                                <option value="">Selecione um curso</option>
+                                {% for curso in ['CTRL+KIDS', 'CTRL+TEENS', 'CTRL+YOUNG', 'CTRL+PRO'] %}
+                                <option value="{{ curso }}" {{ 'selected' if dados and dados.curso == curso else '' }}>
+                                    {{ curso }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                Selecione um curso.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Data da AE</label>
+                            <input name="data_ae" class="form-control" 
+                                value="{{ dados.data_ae if dados else '' }}"
+                                pattern="^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[0-2])/\d{4}$" />
+                            <div class="invalid-feedback">
+                                Digite uma data válida no formato DD/MM/AAAA
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Hora da AE</label>
+                            <input name="hora_ae" class="form-control" 
+                                value="{{ dados.hora_ae if dados else '' }}"
+                                pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$" />
+                            <div class="invalid-feedback">
+                                Digite uma hora válida no formato HH:MM (exemplo: 8:30 ou 14:45)
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Observações</label>
+                            <input name="observacao" class="form-control" 
+                                value="{{ dados.observacao if dados else '' }}" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Chances de Fechar</label>
+                            <select name="chance" class="form-select">
+                                <option value="">Selecione uma opção</option>
+                                {% for chance in ['Baixo', 'Médio', 'Alto'] %}
+                                <option value="{{ chance }}" {{ 'selected' if dados and dados.chance == chance else '' }}>
+                                    {{ chance }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                Selecione uma opção.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status da Ligação</label>
+                            <select name="ligacao" class="form-select">
+                                <option value="">Selecione uma opção</option>
+                                {% for status in ['Feita', 'Não atendida', 'Não feita'] %}
+                                <option value="{{ status }}" {{ 'selected' if dados and dados.ligacao == status else '' }}>
+                                    {{ status }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                Selecione uma opção.
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-success">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('leadForm');
+    
+    // Função para formatar número de telefone
+    function formatarTelefone(input) {
+        let value = input.value.replace(/\D/g, '');
+        if (value.length >= 11) {
+            value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1)$2-$3');
+        } else if (value.length >= 10) {
+            value = value.replace(/^(\d{2})(\d{4})(\d{4}).*/, '($1)$2-$3');
+        }
+        input.value = value;
+    }
+
+    // Função para validar data
+    function validarData(input) {
+        if (input.name === 'data_contato' && input.value.toLowerCase() === 'hoje') {
+            input.setCustomValidity('');
+            return true;
+        }
+
+        if (!input.value && input.name !== 'data_contato') {
+            input.setCustomValidity('');
+            return true;
+        }
+
+        const pattern = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/;
+        if (!pattern.test(input.value)) {
+            input.setCustomValidity('Data inválida');
+            return false;
+        }
+
+        // Validar se a data existe
+        const [dia, mes, ano] = input.value.split('/').map(Number);
+        const data = new Date(ano, mes - 1, dia);
+        const dataValida = data.getDate() === dia && 
+                          data.getMonth() === mes - 1 && 
+                          data.getFullYear() === ano;
+
+        if (!dataValida) {
+            input.setCustomValidity('Data inválida');
+            return false;
+        }
+
+        input.setCustomValidity('');
+        return true;
+    }
+
+    // Função para validar hora
+    function validarHora(input) {
+        if (!input.value) {
+            input.setCustomValidity('');
+            return true;
+        }
+
+        const pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!pattern.test(input.value)) {
+            input.setCustomValidity('Hora inválida');
+            return false;
+        }
+        input.setCustomValidity('');
+        return true;
+    }
+
+    // Função para validar nome
+    function validarNome(input) {
+        if (!input.value) {
+            input.setCustomValidity('');
+            return true;
+        }
+
+        const pattern = /^[A-Za-zÀ-ÿ\s]{3,}$/;
+        if (!pattern.test(input.value)) {
+            input.setCustomValidity('Nome inválido');
+            return false;
+        }
+        input.setCustomValidity('');
+        return true;
+    }
+
+    // Adicionar listeners para validação em tempo real
+    form.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', function() {
+            this.classList.remove('is-invalid');
+            this.classList.remove('is-valid');
+            
+            if (this.name === 'numero') {
+                formatarTelefone(this);
+            }
+            if (this.name === 'data_ae' || this.name === 'data_contato') {
+                validarData(this);
+            }
+            if (this.name === 'hora_ae') {
+                validarHora(this);
+            }
+            if (this.name === 'responsavel' || this.name === 'aluno') {
+                validarNome(this);
+            }
+
+            // Apenas mostra feedback visual se o campo for obrigatório ou estiver preenchido
+            if (this.required || this.value) {
+                if (this.checkValidity()) {
+                    this.classList.add('is-valid');
+                } else {
+                    this.classList.add('is-invalid');
+                }
+            }
+        });
+    });
+
+    // Validar formulário antes de enviar
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        
+        let isValid = true;
+        form.querySelectorAll('input, select').forEach(input => {
+            input.classList.remove('is-invalid');
+            input.classList.remove('is-valid');
+
+            // Validar apenas campos obrigatórios ou preenchidos
+            if (input.required || input.value) {
+                if (input.name === 'numero') {
+                    formatarTelefone(input);
+                }
+                if (input.name === 'data_ae' || input.name === 'data_contato') {
+                    if (!validarData(input)) isValid = false;
+                }
+                if (input.name === 'hora_ae') {
+                    if (!validarHora(input)) isValid = false;
+                }
+                if (input.name === 'responsavel' || input.name === 'aluno') {
+                    if (!validarNome(input)) isValid = false;
+                }
+
+                if (!input.checkValidity()) {
+                    isValid = false;
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.add('is-valid');
+                }
+            }
+        });
+
+        if (isValid) {
+            this.submit();
+        }
+    });
+});
+</script>
+{% endblock %}

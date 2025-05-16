@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h2 class="h4 mb-0">Mensagem de Agendamento</h2>
+                    <a href="{{ url_for('menu') }}" class="btn btn-outline-light">
+                        <i class="bi bi-arrow-left"></i> Voltar ao Menu
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form id="messageForm" onsubmit="buscarLeads(); return false;">
+                        <div class="mb-3">
+                            <label class="form-label">Buscar por Número de Telefone</label>
+                            <div class="input-group">
+                                <input type="tel" id="searchInput" class="form-control" placeholder="Digite o número do telefone...">
+                                <button type="button" class="btn btn-outline-success" onclick="buscarLeads()">
+                                    <i class="bi bi-search"></i> Buscar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Resultados da busca -->
+                        <div id="searchResults" class="list-group mb-4" style="max-height: 200px; overflow-y: auto;">
+                            <!-- Os resultados aparecerão aqui -->
+                        </div>
+
+                        <!-- Botão Gerar Mensagem -->
+                        <div class="text-center mb-3" id="gerarMensagemDiv" style="display: none;">
+                            <button type="button" class="btn btn-primary" onclick="gerarMensagem()">
+                                <i class="bi bi-envelope"></i> Gerar Mensagem de Agendamento
+                            </button>
+                        </div>
+
+                        <!-- Área da Mensagem -->
+                        <div id="mensagemArea" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">Mensagem de Agendamento</label>
+                                <textarea id="mensagem" name="mensagem" class="form-control" rows="12">*CONFIRMAÇÃO DE AULA EXPERIMENTAL*
+
+Olá, *[Nome do Responsável]*! Tudo bem? 😊
+Estamos entrando em contato para confirmar os dados da aula experimental agendada para o(a) aluno(a) *[Nome do Aluno]*, de *[Idade do Aluno] anos*.
+
+📅 Data da aula: *[Data AE]*
+🕒 Horário: *[Hora planejada AE] até [Hora Fim]*
+👨‍💻 Curso: *[Curso]*
+📍 Local: *CTRL+PLAY Santa Mônica - dentro do CNA*
+*Av. João Mendes, 20 - Santa Mônica Popular, Vila Velha - ES, 29105-640*
+
+
+Poderia, por gentileza, confirmar se está tudo certinho e se podemos agendar oficialmente? 😄</textarea>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-success" onclick="copiarMensagem()">
+                                    <i class="bi bi-clipboard"></i> Copiar Mensagem
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Dados do backend
+var leads = JSON.parse('{{ leads|tojson|safe }}');
+var selectedLead = null;
+
+// Função para normalizar número de telefone (remove espaços, parênteses e traços)
+function normalizarNumero(numero) {
+    if (!numero) return '';
+    return String(numero).replace(/[\s\(\)\-]/g, '');
+}
+
+// Função para calcular hora fim
+function calcularHoraFim(horaInicio) {
+    const [hora, minuto] = horaInicio.split(':').map(Number);
+    let horaFim = hora + 1;
+    if (horaFim >= 24) horaFim -= 24;
+    return `${horaFim.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
+}
+
+// Função para formatar a data no padrão brasileiro
+function formatarData(dataString) {
+    if (!dataString) return '';
+    
+    const diasSemana = {
+        'Sun': 'Domingo',
+        'Mon': 'Segunda',
+        'Tue': 'Terça',
+        'Wed': 'Quarta',
+        'Thu': 'Quinta',
+        'Fri': 'Sexta',
+        'Sat': 'Sábado'
+    };
+
+    try {
+        const data = new Date(dataString);
+        const diaSemana = diasSemana[data.toDateString().split(' ')[0]];
+        const dia = data.getDate().toString().padStart(2, '0');
+        const mes = (data.getMonth() + 1).toString().padStart(2, '0');
+        const ano = data.getFullYear();
+        
+        return `${diaSemana} - ${dia}/${mes}/${ano}`;
+    } catch (e) {
+        console.error("Erro ao formatar data:", e);
+        return dataString;
+    }
+}
+
+// Função de busca
+function buscarLeads() {
+    console.log("Função buscarLeads chamada");
+    const searchTerm = normalizarNumero(document.getElementById('searchInput').value);
+    const resultsDiv = document.getElementById('searchResults');
+    resultsDiv.innerHTML = '';
+    
+    if (!searchTerm) {
+        resultsDiv.innerHTML = '<div class="list-group-item text-muted">Digite um número de telefone para buscar...</div>';
+        return;
+    }
+    
+    console.log("Buscando por:", searchTerm);
+    console.log("Total de leads:", leads.length);
+    
+    const matchingLeads = leads.filter(lead => {
+        const numeroNormalizado = normalizarNumero(lead['Número']);
+        return numeroNormalizado.includes(searchTerm);
+    });
+    
+    console.log("Leads encontrados:", matchingLeads.length);
+    
+    if (matchingLeads.length === 0) {
+        resultsDiv.innerHTML = '<div class="list-group-item text-muted">Nenhum resultado encontrado</div>';
+        return;
+    }
+    
+    matchingLeads.forEach((lead, index) => {
+        const div = document.createElement('div');
+        div.className = 'list-group-item list-group-item-action';
+        div.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>${lead['Nome do responsável']}</strong><br>
+                    <small class="text-muted">
+                        Aluno: ${lead['Nome do aluno']} | 
+                        Tel: ${lead['Número']} | 
+                        Curso: ${lead['Curso']}
+                    </small>
+                </div>
+                <button type="button" class="btn btn-sm btn-success" onclick="selecionarLead(${leads.indexOf(lead)})">
+                    <i class="bi bi-check"></i> Selecionar
+                </button>
+            </div>
+        `;
+        resultsDiv.appendChild(div);
+    });
+}
+
+// Função para selecionar um lead
+function selecionarLead(index) {
+    console.log("Selecionando lead:", index);
+    selectedLead = leads[index];
+    document.getElementById('searchResults').innerHTML = `
+        <div class="list-group-item bg-light">
+            <strong>Selecionado:</strong> ${selectedLead['Nome do responsável']} - ${selectedLead['Nome do aluno']}
+        </div>
+    `;
+    document.getElementById('gerarMensagemDiv').style.display = 'block';
+    document.getElementById('mensagemArea').style.display = 'none';
+}
+
+// Função para gerar mensagem
+function gerarMensagem() {
+    console.log("Gerando mensagem para:", selectedLead);
+    if (!selectedLead) {
+        console.log("Nenhum lead selecionado!");
+        return;
+    }
+    
+    const horaFim = calcularHoraFim(selectedLead['Hora planejada AE']);
+    const mensagem = document.getElementById('mensagem');
+    
+    // Substitui todos os campos na mensagem
+    let texto = mensagem.value;
+    const substituicoes = {
+        '[Nome do Responsável]': selectedLead['Nome do responsável'],
+        '[Nome do Aluno]': selectedLead['Nome do aluno'],
+        '[Idade do Aluno]': selectedLead['Idade do aluno'],
+        '[Data AE]': formatarData(selectedLead['Data AE']),
+        '[Hora planejada AE]': selectedLead['Hora planejada AE'],
+        '[Hora Fim]': horaFim,
+        '[Curso]': selectedLead['Curso']
+    };
+
+    // Faz todas as substituições
+    for (const [placeholder, valor] of Object.entries(substituicoes)) {
+        const regex = new RegExp(placeholder.replace(/[\[\]]/g, '\\$&'), 'g');
+        texto = texto.replace(regex, valor || '');
+    }
+    
+    mensagem.value = texto;
+    document.getElementById('mensagemArea').style.display = 'block';
+    console.log("Mensagem gerada com sucesso!");
+}
+
+// Função para copiar mensagem
+function copiarMensagem() {
+    const mensagem = document.getElementById('mensagem');
+    navigator.clipboard.writeText(mensagem.value).then(() => {
+        alert('Mensagem copiada para a área de transferência!');
+    });
+}
+
+// Adiciona evento de tecla Enter no campo de busca
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        buscarLeads();
+    }
+});
+</script>
+{% endblock %} 

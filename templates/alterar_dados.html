@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h2 class="h4 mb-0">Alterar Dados dos Leads</h2>
+            <a href="{{ url_for('menu') }}" class="btn btn-outline-light">
+                <i class="bi bi-arrow-left"></i> Voltar ao Menu
+            </a>
+        </div>
+        <div class="card-body">
+            <!-- Campo de Busca -->
+            <div class="mb-4">
+                <div class="input-group">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Buscar por nome, número ou aluno...">
+                    <button class="btn btn-outline-primary" type="button" id="searchButton">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela de Leads -->
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nome do Responsável</th>
+                            <th>Número</th>
+                            <th>Curso</th>
+                            <th>Data AE</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leadsTableBody">
+                        {% for lead in leads %}
+                        <tr>
+                            <td>{{ lead['Nome do responsável'] }}</td>
+                            <td>{{ lead['Número'] }}</td>
+                            <td>{{ lead['Curso'] }}</td>
+                            <td>{{ lead['Data AE'] }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" data-index="{{ loop.index0 }}">
+                                    <i class="bi bi-pencil"></i> Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edição -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Editar Lead</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm" method="POST">
+                    <input type="hidden" id="leadIndex" name="index">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nome do Responsável</label>
+                            <input type="text" class="form-control" id="editResponsavel" name="responsavel">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Número</label>
+                            <input type="text" class="form-control" id="editNumero" name="numero">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Nome do Aluno</label>
+                            <input type="text" class="form-control" id="editAluno" name="aluno">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Idade do Aluno</label>
+                            <input type="number" class="form-control" id="editIdade" name="idade">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Curso</label>
+                            <select class="form-select" id="editCurso" name="curso">
+                                <option value="">Selecione um curso</option>
+                                {% for curso in ['CTRL+KIDS', 'CTRL+TEENS', 'CTRL+YOUNG', 'CTRL+PRO'] %}
+                                <option value="{{ curso }}">{{ curso }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Data AE</label>
+                            <input type="text" class="form-control" id="editDataAE" name="data_ae">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Hora AE</label>
+                            <input type="text" class="form-control" id="editHoraAE" name="hora_ae">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Chances de Fechar</label>
+                            <select class="form-select" id="editChance" name="chance">
+                                <option value="">Selecione uma opção</option>
+                                {% for chance in ['Baixo', 'Médio', 'Alto'] %}
+                                <option value="{{ chance }}">{{ chance }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Observação</label>
+                            <textarea class="form-control" id="editObservacao" name="observacao" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger me-auto" onclick="excluirLead()">
+                    <i class="bi bi-trash"></i> Excluir
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarAlteracoes()">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let leads = {{ leads|tojson|safe }};
+let editModal;
+let allLeads = [...leads];
+
+document.addEventListener('DOMContentLoaded', function() {
+    editModal = new bootstrap.Modal(document.getElementById('editModal'));
+    
+    // Adiciona evento de clique para todos os botões de editar
+    document.querySelectorAll('[data-index]').forEach(button => {
+        button.addEventListener('click', function() {
+            const index = this.getAttribute('data-index');
+            abrirModalEdicao(index);
+        });
+    });
+});
+
+function buscarLeads() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const tbody = document.getElementById('leadsTableBody');
+    tbody.innerHTML = '';
+    
+    if (!searchTerm) {
+        mostrarTodosLeads();
+        return;
+    }
+    
+    const matchingLeads = allLeads.filter(lead => 
+        (lead['Nome do responsável'] || '').toLowerCase().includes(searchTerm) ||
+        (lead['Número'] || '').toLowerCase().includes(searchTerm) ||
+        (lead['Nome do aluno'] || '').toLowerCase().includes(searchTerm)
+    );
+    
+    matchingLeads.forEach((lead, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${lead['Nome do responsável'] || ''}</td>
+            <td>${lead['Número'] || ''}</td>
+            <td>${lead['Curso'] || ''}</td>
+            <td>${lead['Data AE'] || ''}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" data-index="${allLeads.indexOf(lead)}">
+                    <i class="bi bi-pencil"></i> Editar
+                </button>
+            </td>
+        `;
+        
+        // Adiciona evento de clique ao botão
+        const editButton = tr.querySelector('[data-index]');
+        editButton.addEventListener('click', function() {
+            abrirModalEdicao(this.getAttribute('data-index'));
+        });
+        
+        tbody.appendChild(tr);
+    });
+}
+
+function mostrarTodosLeads() {
+    const tbody = document.getElementById('leadsTableBody');
+    tbody.innerHTML = '';
+    
+    allLeads.forEach((lead, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${lead['Nome do responsável'] || ''}</td>
+            <td>${lead['Número'] || ''}</td>
+            <td>${lead['Curso'] || ''}</td>
+            <td>${lead['Data AE'] || ''}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" data-index="${index}">
+                    <i class="bi bi-pencil"></i> Editar
+                </button>
+            </td>
+        `;
+        
+        // Adiciona evento de clique ao botão
+        const editButton = tr.querySelector('[data-index]');
+        editButton.addEventListener('click', function() {
+            abrirModalEdicao(this.getAttribute('data-index'));
+        });
+        
+        tbody.appendChild(tr);
+    });
+}
+
+function abrirModalEdicao(index) {
+    const lead = allLeads[index];
+    document.getElementById('leadIndex').value = index;
+    document.getElementById('editResponsavel').value = lead['Nome do responsável'] || '';
+    document.getElementById('editNumero').value = lead['Número'] || '';
+    document.getElementById('editAluno').value = lead['Nome do aluno'] || '';
+    document.getElementById('editIdade').value = lead['Idade do aluno'] || '';
+    document.getElementById('editCurso').value = lead['Curso'] || '';
+    document.getElementById('editDataAE').value = lead['Data AE'] || '';
+    document.getElementById('editHoraAE').value = lead['Hora planejada AE'] || '';
+    document.getElementById('editChance').value = lead['Chances de fechar'] || '';
+    document.getElementById('editObservacao').value = lead['Observação'] || '';
+    editModal.show();
+}
+
+function excluirLead() {
+    if (!confirm('Tem certeza que deseja excluir este lead?')) {
+        return;
+    }
+
+    const form = document.getElementById('editForm');
+    const index = form.index.value;
+
+    fetch('/excluir_lead', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ index: index })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Erro ao excluir lead: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao excluir lead: ' + error);
+    });
+}
+
+function salvarAlteracoes() {
+    const form = document.getElementById('editForm');
+    const formData = new FormData(form);
+    
+    fetch('/alterar_dados', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            index: form.index.value,
+            responsavel: form.responsavel.value,
+            numero: form.numero.value,
+            aluno: form.aluno.value,
+            idade: form.idade.value,
+            curso: form.curso.value,
+            data_ae: form.data_ae.value,
+            hora_ae: form.hora_ae.value,
+            chance: form.chance.value,
+            observacao: form.observacao.value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Erro ao salvar alterações: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao salvar alterações: ' + error);
+    });
+}
+
+// Event Listeners
+document.getElementById('searchButton').addEventListener('click', buscarLeads);
+document.getElementById('searchInput').addEventListener('keyup', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        buscarLeads();
+    }
+});
+
+// Busca automática enquanto digita (após 300ms de pausa)
+let timeoutId;
+document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(buscarLeads, 300);
+});
+</script>
+{% endblock %} 

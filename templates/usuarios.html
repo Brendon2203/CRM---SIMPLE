@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h2 class="h4 mb-0">Gerenciar Usuários</h2>
+            <a href="{{ url_for('menu') }}" class="btn btn-outline-light">
+                <i class="bi bi-arrow-left"></i> Voltar ao Menu
+            </a>
+        </div>
+        <div class="card-body">
+            {% if sucesso %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill"></i> {{ sucesso }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
+            {% if erro %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i> {{ erro }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
+
+            <!-- Formulário de Novo Usuário -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Adicionar Novo Usuário</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="userForm">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Nome de Usuário</label>
+                                <input type="text" name="username" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Senha</label>
+                                <input type="password" name="password" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Função</label>
+                                <select name="funcao" class="form-select" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="admin">Administrador</option>
+                                    <option value="funcionario">Funcionário</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-person-plus"></i> Adicionar Usuário
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Lista de Usuários -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Usuários Cadastrados</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Usuário</th>
+                                    <th>Função</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for usuario in usuarios %}
+                                <tr>
+                                    <td>{{ usuario['usuario'] }}</td>
+                                    <td>
+                                        {% if usuario['funcao'] == 'admin' %}
+                                        <span class="badge bg-primary">Administrador</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Funcionário</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if usuario['usuario'] != session['usuario'] %}
+                                        <button class="btn btn-sm btn-danger" onclick="excluirUsuario('{{ usuario['usuario'] }}')">
+                                            <i class="bi bi-trash"></i> Excluir
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function excluirUsuario(username) {
+    if (!confirm('Tem certeza que deseja excluir este usuário?')) {
+        return;
+    }
+
+    fetch(`/excluir_usuario/${username}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Erro ao excluir usuário: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Erro ao excluir usuário: ' + error);
+        });
+}
+</script>
+{% endblock %} 

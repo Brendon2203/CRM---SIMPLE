@@ -124,7 +124,7 @@
                             <label class="form-label">Status da Ligação</label>
                             <select name="ligacao" class="form-select">
                                 <option value="">Selecione uma opção</option>
-                                {% for status in ['Feita', 'Não atendida', 'Não feita'] %}
+                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu', 'Já é aluno'] %}
                                 <option value="{{ status }}" {{ 'selected' if dados and dados.ligacao == status else '' }}>
                                     {{ status }}
                                 </option>
@@ -132,6 +132,20 @@
                             </select>
                             <div class="invalid-feedback">
                                 Selecione uma opção.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Origem do Lead <span class="text-danger">*</span></label>
+                            <select name="origem_lead" class="form-select" required>
+                                <option value="">Selecione a origem</option>
+                                {% for origem in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação'] %}
+                                <option value="{{ origem }}" {{ 'selected' if dados and dados.origem_lead == origem else '' }}>
+                                    {{ origem }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">
+                                Por favor, selecione a origem do lead.
                             </div>
                         </div>
                         <div class="text-center">
@@ -144,9 +158,18 @@
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('leadForm');
+    
+    // Adiciona máscaras aos campos
+    $('input[name="numero"]').mask('(00)00000-0000');
+    $('input[name="data_contato"]').mask('00/00/0000');
+    $('input[name="data_ae"]').mask('00/00/0000');
+    $('input[name="hora_ae"]').mask('00:00');
     
     // Função para formatar número de telefone
     function formatarTelefone(input) {
@@ -205,92 +228,55 @@ document.addEventListener('DOMContentLoaded', function() {
             input.setCustomValidity('Hora inválida');
             return false;
         }
+
         input.setCustomValidity('');
         return true;
     }
 
-    // Função para validar nome
-    function validarNome(input) {
-        if (!input.value) {
-            input.setCustomValidity('');
-            return true;
+    // Adiciona validação personalizada para o campo de origem do lead
+    const origemLeadSelect = form.querySelector('select[name="origem_lead"]');
+    origemLeadSelect.addEventListener('change', function() {
+        if (!this.value) {
+            this.setCustomValidity('Por favor, selecione a origem do lead');
+        } else {
+            this.setCustomValidity('');
         }
-
-        const pattern = /^[A-Za-zÀ-ÿ\s]{3,}$/;
-        if (!pattern.test(input.value)) {
-            input.setCustomValidity('Nome inválido');
-            return false;
-        }
-        input.setCustomValidity('');
-        return true;
-    }
-
-    // Adicionar listeners para validação em tempo real
-    form.querySelectorAll('input, select').forEach(input => {
-        input.addEventListener('input', function() {
-            this.classList.remove('is-invalid');
-            this.classList.remove('is-valid');
-            
-            if (this.name === 'numero') {
-                formatarTelefone(this);
-            }
-            if (this.name === 'data_ae' || this.name === 'data_contato') {
-                validarData(this);
-            }
-            if (this.name === 'hora_ae') {
-                validarHora(this);
-            }
-            if (this.name === 'responsavel' || this.name === 'aluno') {
-                validarNome(this);
-            }
-
-            // Apenas mostra feedback visual se o campo for obrigatório ou estiver preenchido
-            if (this.required || this.value) {
-                if (this.checkValidity()) {
-                    this.classList.add('is-valid');
-                } else {
-                    this.classList.add('is-invalid');
-                }
-            }
-        });
     });
 
-    // Validar formulário antes de enviar
+    // Validação do formulário antes do envio
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        
         let isValid = true;
-        form.querySelectorAll('input, select').forEach(input => {
-            input.classList.remove('is-invalid');
-            input.classList.remove('is-valid');
 
-            // Validar apenas campos obrigatórios ou preenchidos
-            if (input.required || input.value) {
-                if (input.name === 'numero') {
-                    formatarTelefone(input);
-                }
-                if (input.name === 'data_ae' || input.name === 'data_contato') {
-                    if (!validarData(input)) isValid = false;
-                }
-                if (input.name === 'hora_ae') {
-                    if (!validarHora(input)) isValid = false;
-                }
-                if (input.name === 'responsavel' || input.name === 'aluno') {
-                    if (!validarNome(input)) isValid = false;
-                }
-
-                if (!input.checkValidity()) {
-                    isValid = false;
-                    input.classList.add('is-invalid');
-                } else {
-                    input.classList.add('is-valid');
-                }
+        // Validar campos obrigatórios
+        const requiredFields = form.querySelectorAll('[required]');
+        requiredFields.forEach(field => {
+            if (!field.value) {
+                field.setCustomValidity('Este campo é obrigatório');
+                isValid = false;
             }
         });
 
-        if (isValid) {
-            this.submit();
+        // Validar campos específicos
+        const telefone = form.querySelector('input[name="numero"]');
+        const dataContato = form.querySelector('input[name="data_contato"]');
+        const dataAE = form.querySelector('input[name="data_ae"]');
+        const horaAE = form.querySelector('input[name="hora_ae"]');
+
+        if (!validarTelefone(telefone)) isValid = false;
+        if (!validarData(dataContato)) isValid = false;
+        if (dataAE.value && !validarData(dataAE)) isValid = false;
+        if (horaAE.value && !validarHora(horaAE)) isValid = false;
+
+        if (!isValid) {
+            event.preventDefault();
         }
+    });
+
+    // Validação em tempo real
+    form.querySelectorAll('input, select').forEach(field => {
+        field.addEventListener('input', function() {
+            this.setCustomValidity('');
+        });
     });
 });
 </script>

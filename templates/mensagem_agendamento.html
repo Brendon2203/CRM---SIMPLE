@@ -29,7 +29,7 @@
 
                         <!-- Botão Gerar Mensagem -->
                         <div class="text-center mb-3" id="gerarMensagemDiv" style="display: none;">
-                            <button type="button" class="btn btn-primary" onclick="gerarMensagem()">
+                            <button type="button" class="btn btn-success" onclick="gerarMensagem()">
                                 <i class="bi bi-envelope"></i> Gerar Mensagem de Agendamento
                             </button>
                         </div>
@@ -38,19 +38,17 @@
                         <div id="mensagemArea" style="display: none;">
                             <div class="mb-3">
                                 <label class="form-label">Mensagem de Agendamento</label>
-                                <textarea id="mensagem" name="mensagem" class="form-control" rows="12">*CONFIRMAÇÃO DE AULA EXPERIMENTAL*
-
-Olá, *[Nome do Responsável]*! Tudo bem? 😊
-Estamos entrando em contato para confirmar os dados da aula experimental agendada para o(a) aluno(a) *[Nome do Aluno]*, de *[Idade do Aluno] anos*.
+                                <div id="mensagem" class="form-control bg-light" style="white-space: pre-wrap; min-height: 200px;">
+Olá, *[Nome do Responsável]*! Tudo bem? 
+Estamos entrando em contato para confirmar a aula experimental agendada para o(a) aluno(a) *[Nome do Aluno]*, de *[Idade do Aluno]* anos.       
 
 📅 Data da aula: *[Data AE]*
-🕒 Horário: *[Hora planejada AE] até [Hora Fim]*
+🕒 Horário: *[Hora planejada AE]* até *[Hora Fim]*
 👨‍💻 Curso: *[Curso]*
 📍 Local: *CTRL+PLAY Santa Mônica - dentro do CNA*
 *Av. João Mendes, 20 - Santa Mônica Popular, Vila Velha - ES, 29105-640*
 
-
-Poderia, por gentileza, confirmar se está tudo certinho e se podemos agendar oficialmente? 😄</textarea>
+Poderia, por gentileza, confirmar se está tudo certinho?</div>
                             </div>
                             <div class="text-center">
                                 <button type="button" class="btn btn-success" onclick="copiarMensagem()">
@@ -67,21 +65,13 @@ Poderia, por gentileza, confirmar se está tudo certinho e se podemos agendar of
 
 <script>
 // Dados do backend
-var leads = JSON.parse('{{ leads|tojson|safe }}');
+var leads = {{ leads|tojson|safe }};
 var selectedLead = null;
 
 // Função para normalizar número de telefone (remove espaços, parênteses e traços)
 function normalizarNumero(numero) {
     if (!numero) return '';
     return String(numero).replace(/[\s\(\)\-]/g, '');
-}
-
-// Função para calcular hora fim
-function calcularHoraFim(horaInicio) {
-    const [hora, minuto] = horaInicio.split(':').map(Number);
-    let horaFim = hora + 1;
-    if (horaFim >= 24) horaFim -= 24;
-    return `${horaFim.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
 }
 
 // Função para formatar a data no padrão brasileiro
@@ -112,6 +102,15 @@ function formatarData(dataString) {
     }
 }
 
+// Função para calcular hora fim
+function calcularHoraFim(horaInicio) {
+    if (!horaInicio) return '';
+    const [hora, minuto] = horaInicio.split(':').map(Number);
+    let horaFim = hora + 1;
+    if (horaFim >= 24) horaFim -= 24;
+    return `${horaFim.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}`;
+}
+
 // Função de busca
 function buscarLeads() {
     console.log("Função buscarLeads chamada");
@@ -139,9 +138,10 @@ function buscarLeads() {
         return;
     }
     
-    matchingLeads.forEach((lead, index) => {
+    matchingLeads.forEach(lead => {
         const div = document.createElement('div');
         div.className = 'list-group-item list-group-item-action';
+        const numeroNormalizado = normalizarNumero(lead['Número']);
         div.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -152,7 +152,7 @@ function buscarLeads() {
                         Curso: ${lead['Curso']}
                     </small>
                 </div>
-                <button type="button" class="btn btn-sm btn-success" onclick="selecionarLead(${leads.indexOf(lead)})">
+                <button type="button" class="btn btn-sm btn-success" onclick="selecionarLead('${numeroNormalizado}')">
                     <i class="bi bi-check"></i> Selecionar
                 </button>
             </div>
@@ -162,16 +162,20 @@ function buscarLeads() {
 }
 
 // Função para selecionar um lead
-function selecionarLead(index) {
-    console.log("Selecionando lead:", index);
-    selectedLead = leads[index];
-    document.getElementById('searchResults').innerHTML = `
-        <div class="list-group-item bg-light">
-            <strong>Selecionado:</strong> ${selectedLead['Nome do responsável']} - ${selectedLead['Nome do aluno']}
-        </div>
-    `;
-    document.getElementById('gerarMensagemDiv').style.display = 'block';
-    document.getElementById('mensagemArea').style.display = 'none';
+function selecionarLead(numeroTelefone) {
+    console.log("Selecionando lead com número:", numeroTelefone);
+    // Encontra o lead pelo número de telefone normalizado
+    selectedLead = leads.find(lead => normalizarNumero(lead['Número']) === numeroTelefone);
+    
+    if (selectedLead) {
+        document.getElementById('searchResults').innerHTML = `
+            <div class="list-group-item bg-light">
+                <strong>Selecionado:</strong> ${selectedLead['Nome do responsável']} - ${selectedLead['Nome do aluno']}
+            </div>
+        `;
+        document.getElementById('gerarMensagemDiv').style.display = 'block';
+        document.getElementById('mensagemArea').style.display = 'none';
+    }
 }
 
 // Função para gerar mensagem
@@ -185,25 +189,19 @@ function gerarMensagem() {
     const horaFim = calcularHoraFim(selectedLead['Hora planejada AE']);
     const mensagem = document.getElementById('mensagem');
     
-    // Substitui todos os campos na mensagem
-    let texto = mensagem.value;
-    const substituicoes = {
-        '[Nome do Responsável]': selectedLead['Nome do responsável'],
-        '[Nome do Aluno]': selectedLead['Nome do aluno'],
-        '[Idade do Aluno]': selectedLead['Idade do aluno'],
-        '[Data AE]': formatarData(selectedLead['Data AE']),
-        '[Hora planejada AE]': selectedLead['Hora planejada AE'],
-        '[Hora Fim]': horaFim,
-        '[Curso]': selectedLead['Curso']
-    };
+    // Template da mensagem
+    const texto = `Olá, *${selectedLead['Nome do responsável']}*! Tudo bem? 
+Estamos entrando em contato para confirmar a aula experimental agendada para o(a) aluno(a) *${selectedLead['Nome do aluno']}*, de *${selectedLead['Idade do aluno']}* anos.       
 
-    // Faz todas as substituições
-    for (const [placeholder, valor] of Object.entries(substituicoes)) {
-        const regex = new RegExp(placeholder.replace(/[\[\]]/g, '\\$&'), 'g');
-        texto = texto.replace(regex, valor || '');
-    }
-    
-    mensagem.value = texto;
+📅 Data da aula: *${selectedLead['Data AE']}*
+🕒 Horário: *${selectedLead['Hora planejada AE']}* até *${horaFim}*
+👨‍💻 Curso: *${selectedLead['Curso']}*
+📍 Local: *CTRL+PLAY Santa Mônica - dentro do CNA*
+*Av. João Mendes, 20 - Santa Mônica Popular, Vila Velha - ES, 29105-640*
+
+Poderia, por gentileza, confirmar se está tudo certinho?`;
+
+    mensagem.textContent = texto;
     document.getElementById('mensagemArea').style.display = 'block';
     console.log("Mensagem gerada com sucesso!");
 }
@@ -211,7 +209,7 @@ function gerarMensagem() {
 // Função para copiar mensagem
 function copiarMensagem() {
     const mensagem = document.getElementById('mensagem');
-    navigator.clipboard.writeText(mensagem.value).then(() => {
+    navigator.clipboard.writeText(mensagem.textContent).then(() => {
         alert('Mensagem copiada para a área de transferência!');
     });
 }

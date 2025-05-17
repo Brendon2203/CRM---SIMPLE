@@ -26,8 +26,11 @@
                         <tr>
                             <th>Nome do Responsável</th>
                             <th>Número</th>
+                            <th>Data de Contato</th>
                             <th>Curso</th>
                             <th>Data AE</th>
+                            <th>Ligação</th>
+                            <th>Lead</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -36,8 +39,11 @@
                         <tr>
                             <td>{{ lead['Nome do responsável'] }}</td>
                             <td>{{ lead['Número'] }}</td>
+                            <td>{{ lead['Data de contato'] }}</td>
                             <td>{{ lead['Curso'] }}</td>
                             <td>{{ lead['Data AE'] }}</td>
+                            <td>{{ lead['Ligação'] }}</td>
+                            <td>{{ lead['Lead'] }}</td>
                             <td>
                                 <button class="btn btn-sm btn-primary" data-index="{{ loop.index0 }}">
                                     <i class="bi bi-pencil"></i> Editar
@@ -73,6 +79,10 @@
                             <input type="text" class="form-control" id="editNumero" name="numero">
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label">Data de Contato</label>
+                            <input type="text" class="form-control" id="editDataContato" name="data_contato" placeholder="DD/MM/YYYY">
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label">Nome do Aluno</label>
                             <input type="text" class="form-control" id="editAluno" name="aluno">
                         </div>
@@ -91,11 +101,11 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Data AE</label>
-                            <input type="text" class="form-control" id="editDataAE" name="data_ae">
+                            <input type="text" class="form-control" id="editDataAE" name="data_ae" placeholder="DD/MM/YYYY">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Hora AE</label>
-                            <input type="text" class="form-control" id="editHoraAE" name="hora_ae">
+                            <input type="text" class="form-control" id="editHoraAE" name="hora_ae" placeholder="HH:MM">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Chances de Fechar</label>
@@ -103,6 +113,24 @@
                                 <option value="">Selecione uma opção</option>
                                 {% for chance in ['Baixo', 'Médio', 'Alto'] %}
                                 <option value="{{ chance }}">{{ chance }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Ligação</label>
+                            <select class="form-select" id="editLigacao" name="ligacao">
+                                <option value="">Selecione uma opção</option>
+                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu', 'Já é aluno'] %}
+                                <option value="{{ status }}">{{ status }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Lead</label>
+                            <select class="form-select" id="editOrigemLead" name="origem_lead" required>
+                                <option value="">Selecione a origem</option>
+                                {% for origem in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação'] %}
+                                <option value="{{ origem }}">{{ origem }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -124,6 +152,9 @@
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+
 <script>
 let leads = {{ leads|tojson|safe }};
 let editModal;
@@ -132,6 +163,12 @@ let allLeads = [...leads];
 document.addEventListener('DOMContentLoaded', function() {
     editModal = new bootstrap.Modal(document.getElementById('editModal'));
     
+    // Adiciona máscaras aos campos
+    $('#editNumero').mask('(00)00000-0000');
+    $('#editDataContato').mask('00/00/0000');
+    $('#editDataAE').mask('00/00/0000');
+    $('#editHoraAE').mask('00:00');
+    
     // Adiciona evento de clique para todos os botões de editar
     document.querySelectorAll('[data-index]').forEach(button => {
         button.addEventListener('click', function() {
@@ -139,7 +176,154 @@ document.addEventListener('DOMContentLoaded', function() {
             abrirModalEdicao(index);
         });
     });
+
+    // Adiciona evento de busca
+    document.getElementById('searchButton').addEventListener('click', buscarLeads);
+    document.getElementById('searchInput').addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') buscarLeads();
+    });
+
+    // Validação de campos no formulário
+    document.getElementById('editForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (validarFormulario()) {
+            salvarAlteracoes();
+        }
+    });
 });
+
+function validarFormulario() {
+    // Validação do número de telefone
+    const numero = document.getElementById('editNumero').value.trim();
+    if (!numero || !numero.match(/^\(\d{2}\)[9]?\d{4}-\d{4}$/)) {
+        alert('Número de telefone inválido. Use o formato (XX)XXXXX-XXXX');
+        return false;
+    }
+
+    // Validação da data de contato
+    const dataContato = document.getElementById('editDataContato').value.trim();
+    if (!dataContato || (dataContato.toLowerCase() !== 'hoje' && !validarData(dataContato))) {
+        alert('Data de contato inválida. Use o formato DD/MM/AAAA ou a palavra "hoje"');
+        return false;
+    }
+
+    // Validação do nome do responsável
+    const responsavel = document.getElementById('editResponsavel').value.trim();
+    if (responsavel && !responsavel.match(/^[A-Za-zÀ-ÿ\s]{3,}$/)) {
+        alert('O nome do responsável deve conter apenas letras e ter no mínimo 3 caracteres.');
+        return false;
+    }
+
+    // Validação do nome do aluno
+    const aluno = document.getElementById('editAluno').value.trim();
+    if (aluno && !aluno.match(/^[A-Za-zÀ-ÿ\s]{3,}$/)) {
+        alert('O nome do aluno deve conter apenas letras e ter no mínimo 3 caracteres.');
+        return false;
+    }
+
+    // Validação da idade
+    const idade = document.getElementById('editIdade').value.trim();
+    if (idade) {
+        const idadeNum = parseInt(idade);
+        if (isNaN(idadeNum) || idadeNum < 4 || idadeNum > 99) {
+            alert('Idade inválida. Deve ser um número entre 4 e 99.');
+            return false;
+        }
+    }
+
+    // Validação da data AE
+    const dataAE = document.getElementById('editDataAE').value.trim();
+    if (dataAE && !validarData(dataAE)) {
+        alert('Data da AE inválida. Use o formato DD/MM/AAAA');
+        return false;
+    }
+
+    // Validação da hora AE
+    const horaAE = document.getElementById('editHoraAE').value.trim();
+    if (horaAE && !horaAE.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        alert('Hora da AE inválida. Use o formato HH:MM');
+        return false;
+    }
+
+    // Validação do campo Lead (obrigatório)
+    const origemLead = document.getElementById('editOrigemLead').value.trim();
+    if (!origemLead) {
+        alert('Por favor, selecione a origem do lead.');
+        return false;
+    }
+
+    return true;
+}
+
+function validarData(data) {
+    if (!data.match(/^\d{2}\/\d{2}\/\d{4}$/)) return false;
+    
+    const [dia, mes, ano] = data.split('/').map(Number);
+    const dataObj = new Date(ano, mes - 1, dia);
+    
+    return dataObj.getDate() === dia &&
+           dataObj.getMonth() === mes - 1 &&
+           dataObj.getFullYear() === ano;
+}
+
+function abrirModalEdicao(index) {
+    const lead = leads[index];
+    document.getElementById('leadIndex').value = index;
+    document.getElementById('editResponsavel').value = lead['Nome do responsável'] || '';
+    document.getElementById('editNumero').value = lead['Número'] || '';
+    document.getElementById('editDataContato').value = lead['Data de contato'] || '';
+    document.getElementById('editAluno').value = lead['Nome do aluno'] || '';
+    document.getElementById('editIdade').value = lead['Idade do aluno'] || '';
+    document.getElementById('editCurso').value = lead['Curso'] || '';
+    document.getElementById('editDataAE').value = lead['Data AE'] || '';
+    document.getElementById('editHoraAE').value = lead['Hora planejada AE'] || '';
+    document.getElementById('editChance').value = lead['Chances de fechar'] || '';
+    document.getElementById('editLigacao').value = lead['Ligação'] || '';
+    document.getElementById('editOrigemLead').value = lead['Lead'] || '';
+    document.getElementById('editObservacao').value = lead['Observação'] || '';
+    editModal.show();
+}
+
+function salvarAlteracoes() {
+    if (!validarFormulario()) {
+        return;
+    }
+
+    const dados = {
+        index: document.getElementById('leadIndex').value,
+        responsavel: document.getElementById('editResponsavel').value,
+        numero: document.getElementById('editNumero').value,
+        data_contato: document.getElementById('editDataContato').value,
+        aluno: document.getElementById('editAluno').value,
+        idade: document.getElementById('editIdade').value,
+        curso: document.getElementById('editCurso').value,
+        data_ae: document.getElementById('editDataAE').value,
+        hora_ae: document.getElementById('editHoraAE').value,
+        chance: document.getElementById('editChance').value,
+        ligacao: document.getElementById('editLigacao').value,
+        origem_lead: document.getElementById('editOrigemLead').value,
+        observacao: document.getElementById('editObservacao').value
+    };
+
+    fetch('/alterar_dados', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dados)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erro ao salvar alterações: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao salvar alterações: ' + error);
+    });
+}
 
 function buscarLeads() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
@@ -162,8 +346,11 @@ function buscarLeads() {
         tr.innerHTML = `
             <td>${lead['Nome do responsável'] || ''}</td>
             <td>${lead['Número'] || ''}</td>
+            <td>${lead['Data de contato'] || ''}</td>
             <td>${lead['Curso'] || ''}</td>
             <td>${lead['Data AE'] || ''}</td>
+            <td>${lead['Ligação'] || ''}</td>
+            <td>${lead['Lead'] || ''}</td>
             <td>
                 <button class="btn btn-sm btn-primary" data-index="${allLeads.indexOf(lead)}">
                     <i class="bi bi-pencil"></i> Editar
@@ -171,7 +358,6 @@ function buscarLeads() {
             </td>
         `;
         
-        // Adiciona evento de clique ao botão
         const editButton = tr.querySelector('[data-index]');
         editButton.addEventListener('click', function() {
             abrirModalEdicao(this.getAttribute('data-index'));
@@ -190,8 +376,11 @@ function mostrarTodosLeads() {
         tr.innerHTML = `
             <td>${lead['Nome do responsável'] || ''}</td>
             <td>${lead['Número'] || ''}</td>
+            <td>${lead['Data de contato'] || ''}</td>
             <td>${lead['Curso'] || ''}</td>
             <td>${lead['Data AE'] || ''}</td>
+            <td>${lead['Ligação'] || ''}</td>
+            <td>${lead['Lead'] || ''}</td>
             <td>
                 <button class="btn btn-sm btn-primary" data-index="${index}">
                     <i class="bi bi-pencil"></i> Editar
@@ -199,7 +388,6 @@ function mostrarTodosLeads() {
             </td>
         `;
         
-        // Adiciona evento de clique ao botão
         const editButton = tr.querySelector('[data-index]');
         editButton.addEventListener('click', function() {
             abrirModalEdicao(this.getAttribute('data-index'));
@@ -209,40 +397,24 @@ function mostrarTodosLeads() {
     });
 }
 
-function abrirModalEdicao(index) {
-    const lead = allLeads[index];
-    document.getElementById('leadIndex').value = index;
-    document.getElementById('editResponsavel').value = lead['Nome do responsável'] || '';
-    document.getElementById('editNumero').value = lead['Número'] || '';
-    document.getElementById('editAluno').value = lead['Nome do aluno'] || '';
-    document.getElementById('editIdade').value = lead['Idade do aluno'] || '';
-    document.getElementById('editCurso').value = lead['Curso'] || '';
-    document.getElementById('editDataAE').value = lead['Data AE'] || '';
-    document.getElementById('editHoraAE').value = lead['Hora planejada AE'] || '';
-    document.getElementById('editChance').value = lead['Chances de fechar'] || '';
-    document.getElementById('editObservacao').value = lead['Observação'] || '';
-    editModal.show();
-}
-
 function excluirLead() {
     if (!confirm('Tem certeza que deseja excluir este lead?')) {
         return;
     }
 
-    const form = document.getElementById('editForm');
-    const index = form.index.value;
-
+    const index = document.getElementById('leadIndex').value;
+    
     fetch('/excluir_lead', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({ index: index })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            window.location.reload();
+            location.reload();
         } else {
             alert('Erro ao excluir lead: ' + data.error);
         }
@@ -251,56 +423,5 @@ function excluirLead() {
         alert('Erro ao excluir lead: ' + error);
     });
 }
-
-function salvarAlteracoes() {
-    const form = document.getElementById('editForm');
-    const formData = new FormData(form);
-    
-    fetch('/alterar_dados', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            index: form.index.value,
-            responsavel: form.responsavel.value,
-            numero: form.numero.value,
-            aluno: form.aluno.value,
-            idade: form.idade.value,
-            curso: form.curso.value,
-            data_ae: form.data_ae.value,
-            hora_ae: form.hora_ae.value,
-            chance: form.chance.value,
-            observacao: form.observacao.value
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            window.location.reload();
-        } else {
-            alert('Erro ao salvar alterações: ' + data.error);
-        }
-    })
-    .catch(error => {
-        alert('Erro ao salvar alterações: ' + error);
-    });
-}
-
-// Event Listeners
-document.getElementById('searchButton').addEventListener('click', buscarLeads);
-document.getElementById('searchInput').addEventListener('keyup', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        buscarLeads();
-    }
-});
-
-// Busca automática enquanto digita (após 300ms de pausa)
-let timeoutId;
-document.getElementById('searchInput').addEventListener('input', function() {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(buscarLeads, 300);
-});
 </script>
 {% endblock %} 

@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify, flash
 import pandas as pd
 from datetime import datetime
 import os
 import re
 import bcrypt
+from config import USERNAME, PASSWORD
+import locale
 
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta'
@@ -11,6 +13,63 @@ app.secret_key = 'sua_chave_secreta'
 # Caminhos dos arquivos Excel
 PLANILHA_PATH = 'clientes.xlsx'
 USUARIOS_PATH = 'usuarios.xlsx'
+
+# Configurar locale para português
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
+    except:
+        pass
+
+def formatar_data(data_str):
+    try:
+        if pd.isna(data_str):
+            return ''
+            
+        # Se já for datetime ou timestamp
+        if isinstance(data_str, (datetime, pd.Timestamp)):
+            data = data_str
+        else:
+            # Converter a string da data para objeto datetime
+            try:
+                data = datetime.strptime(str(data_str).strip(), '%d/%m/%Y')
+            except:
+                return "Data inválida"
+        
+        # Dicionário de dias da semana em português
+        dias = {
+            'Monday': 'Segunda',
+            'Tuesday': 'Terça',
+            'Wednesday': 'Quarta',
+            'Thursday': 'Quinta',
+            'Friday': 'Sexta',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        
+        # Obter o nome do dia em inglês e converter para português
+        dia_semana = dias[data.strftime('%A')]
+        # Formatar a data no padrão brasileiro
+        data_formatada = data.strftime('%d/%m/%Y')
+        return f"{dia_semana} - {data_formatada}"
+    except Exception as e:
+        print(f"Erro ao formatar data: {e}")
+        return "Data inválida"
+
+def carregar_dados():
+    df = pd.read_excel(PLANILHA_PATH)
+    # Garantir que a coluna de data está no formato correto
+    if 'data' in df.columns:
+        df['data'] = pd.to_datetime(df['data'], format='%d/%m/%Y', errors='coerce')
+    return df
+
+def salvar_dados(df):
+    # Garantir que a data seja salva no formato DD/MM/YYYY
+    if 'data' in df.columns:
+        df['data'] = df['data'].dt.strftime('%d/%m/%Y')
+    df.to_excel(PLANILHA_PATH, index=False)
 
 def inicializar_usuarios():
     """Função para criar o arquivo de usuários se não existir"""
@@ -193,6 +252,13 @@ def adicionar():
                         erro='Data de contato inválida. Use o formato DD/MM/AAAA ou a palavra "hoje".',
                         dados=request.form)
 
+            # Validação do campo Lead (obrigatório)
+            origem_lead = request.form['origem_lead'].strip()
+            if not origem_lead or origem_lead not in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação']:
+                return render_template('adicionar.html',
+                    erro='Por favor, selecione uma origem válida para o lead.',
+                    dados=request.form)
+
             # Validações opcionais
             responsavel = request.form['responsavel'].strip().title() if request.form['responsavel'].strip() else ''
             aluno = request.form['aluno'].strip().title() if request.form['aluno'].strip() else ''
@@ -252,7 +318,8 @@ def adicionar():
                 "Hora planejada AE": hora_ae,
                 "Observação": request.form['observacao'].strip(),
                 "Chances de fechar": request.form['chance'].strip(),
-                "Ligação": request.form['ligacao'].strip()
+                "Ligação": request.form['ligacao'].strip(),
+                "Lead": origem_lead
             }
             
             df = pd.concat([df, pd.DataFrame([dados])], ignore_index=True)
@@ -276,18 +343,82 @@ def alterar_dados():
         try:
             dados = request.get_json()
             index = int(dados['index'])
+            
+            # Validação do número de telefone (obrigatório)
+            numero = dados['numero'].strip()
+            if not numero or not re.match(r'^\(\d{2}\)[9]?\d{4}-\d{4}$', numero):
+                return jsonify({'success': False, 'error': 'Número de telefone inválido.'})
+
+            # Verifica se o número já existe em outro registro
             df = pd.read_excel(PLANILHA_PATH)
+            numeros_existentes = df['Número'].astype(str).str.strip().tolist()
+            if numero in numeros_existentes and numeros_existentes.index(numero) != index:
+                return jsonify({'success': False, 'error': 'Este número já existe no banco de dados.'})
+
+            # Processa a data de contato (obrigatório)
+            data_contato = dados['data_contato'].strip()
+            if data_contato.lower() == 'hoje':
+                data_contato = datetime.today().strftime("%d/%m/%Y")
+            else:
+                try:
+                    # Valida o formato da data
+                    datetime.strptime(data_contato, "%d/%m/%Y")
+                except ValueError:
+                    return jsonify({'success': False, 'error': 'Data de contato inválida. Use o formato DD/MM/AAAA ou a palavra "hoje".'})
+
+            # Validação do campo Lead (obrigatório)
+            origem_lead = dados['origem_lead'].strip()
+            if not origem_lead or origem_lead not in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação']:
+                return jsonify({'success': False, 'error': 'Por favor, selecione uma origem válida para o lead.'})
+
+            # Validações opcionais
+            responsavel = dados['responsavel'].strip().title()
+            aluno = dados['aluno'].strip().title()
+            
+            # Valida nome do responsável se fornecido
+            if responsavel and not re.match(r'^[A-Za-zÀ-ÿ\s]{3,}$', responsavel):
+                return jsonify({'success': False, 'error': 'O nome do responsável deve conter apenas letras e ter no mínimo 3 caracteres.'})
+
+            # Valida nome do aluno se fornecido
+            if aluno and not re.match(r'^[A-Za-zÀ-ÿ\s]{3,}$', aluno):
+                return jsonify({'success': False, 'error': 'O nome do aluno deve conter apenas letras e ter no mínimo 3 caracteres.'})
+
+            # Valida idade se fornecida
+            idade = None
+            if dados['idade'].strip():
+                try:
+                    idade = int(dados['idade'])
+                    if idade < 4 or idade > 99:
+                        return jsonify({'success': False, 'error': 'Idade inválida. Deve ser um número entre 4 e 99.'})
+                except ValueError:
+                    return jsonify({'success': False, 'error': 'Idade inválida. Deve ser um número entre 4 e 99.'})
+
+            # Valida data da AE se fornecida
+            data_ae = dados['data_ae'].strip()
+            if data_ae:
+                try:
+                    datetime.strptime(data_ae, "%d/%m/%Y")
+                except ValueError:
+                    return jsonify({'success': False, 'error': 'Data da AE inválida. Use o formato DD/MM/AAAA.'})
+
+            # Valida hora da AE se fornecida
+            hora_ae = dados['hora_ae'].strip()
+            if hora_ae and not re.match(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$', hora_ae):
+                return jsonify({'success': False, 'error': 'Hora da AE inválida. Use o formato HH:MM.'})
             
             # Atualiza os dados do lead
-            df.loc[index, 'Nome do responsável'] = dados['responsavel'].strip().title()
-            df.loc[index, 'Número'] = dados['numero'].strip()
-            df.loc[index, 'Nome do aluno'] = dados['aluno'].strip().title()
-            df.loc[index, 'Idade do aluno'] = int(dados['idade']) if dados['idade'].strip() else ''
+            df.loc[index, 'Nome do responsável'] = responsavel
+            df.loc[index, 'Número'] = numero
+            df.loc[index, 'Data de contato'] = data_contato
+            df.loc[index, 'Nome do aluno'] = aluno
+            df.loc[index, 'Idade do aluno'] = idade if idade is not None else ''
             df.loc[index, 'Curso'] = dados['curso'].strip()
-            df.loc[index, 'Data AE'] = dados['data_ae'].strip()
-            df.loc[index, 'Hora planejada AE'] = dados['hora_ae'].strip()
+            df.loc[index, 'Data AE'] = data_ae
+            df.loc[index, 'Hora planejada AE'] = hora_ae
             df.loc[index, 'Chances de fechar'] = dados['chance'].strip()
             df.loc[index, 'Observação'] = dados['observacao'].strip()
+            df.loc[index, 'Ligação'] = dados['ligacao'].strip()
+            df.loc[index, 'Lead'] = origem_lead
             
             # Salva as alterações
             df.to_excel(PLANILHA_PATH, index=False)
@@ -330,7 +461,7 @@ def mensagem_agendamento():
     print(f"Enviando {len(leads)} leads para o template")
     return render_template('mensagem_agendamento.html', leads=leads)
 
-@app.route('/mensagem_confirmacao')
+@app.route('/mensagem_confirmacao', methods=['GET', 'POST'])
 def mensagem_confirmacao():
     if 'usuario' not in session:
         return redirect(url_for('login'))

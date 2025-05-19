@@ -325,7 +325,8 @@ def adicionar():
                 "Observação": request.form['observacao'].strip(),
                 "Chances de fechar": request.form['chance'].strip(),
                 "Ligação": request.form['ligacao'].strip(),
-                "Lead": origem_lead
+                "Lead": origem_lead,
+                "Tipo aluno": request.form['tipo_aluno'].strip()
             }
             
             df = pd.concat([df, pd.DataFrame([dados])], ignore_index=True)
@@ -474,6 +475,55 @@ def mensagem_confirmacao():
         return redirect(url_for('login'))
     leads = carregar_leads()
     return render_template('mensagem_confirmacao.html', leads=leads)
+
+@app.route('/analise_dados')
+def analise_dados():
+    try:
+        # Lê o arquivo Excel
+        df = pd.read_excel(PLANILHA_PATH)
+        
+        # Métricas principais
+        total_leads = len(df)
+        leads_convertidos = len(df[df['Tipo aluno'].isin(['cna', 'ctrlplay'])])
+        alunos_cna = len(df[df['Tipo aluno'] == 'cna'])
+        ligacoes_atendidas = len(df[df['Ligação'] == 'Atendeu'])
+        
+        # Cálculo das taxas
+        taxa_conversao = round((leads_convertidos / total_leads * 100), 1) if total_leads > 0 else 0
+        taxa_cna = round((alunos_cna / total_leads * 100), 1) if total_leads > 0 else 0
+        taxa_atendimento = round((ligacoes_atendidas / total_leads * 100), 1) if total_leads > 0 else 0
+        
+        # Origem dos leads
+        origem_leads = df['Lead'].value_counts().to_dict()
+        
+        # Status das ligações
+        status_ligacoes = df['Ligação'].value_counts().to_dict()
+        
+        # Distribuição por curso
+        distribuicao_cursos = df['Curso'].value_counts().to_dict()
+        
+        # Taxa de conversão por origem
+        conversao_por_origem = {}
+        for origem in origem_leads.keys():
+            leads_origem = df[df['Lead'] == origem]
+            convertidos_origem = len(leads_origem[leads_origem['Tipo aluno'].isin(['cna', 'ctrlplay'])])
+            taxa = round((convertidos_origem / len(leads_origem) * 100), 1) if len(leads_origem) > 0 else 0
+            conversao_por_origem[origem] = taxa
+        
+        return render_template('analise_dados.html',
+                             total_leads=total_leads,
+                             leads_convertidos=leads_convertidos,
+                             alunos_cna=alunos_cna,
+                             taxa_conversao=taxa_conversao,
+                             taxa_cna=taxa_cna,
+                             taxa_atendimento=taxa_atendimento,
+                             origem_leads=origem_leads,
+                             status_ligacoes=status_ligacoes,
+                             distribuicao_cursos=distribuicao_cursos,
+                             conversao_por_origem=conversao_por_origem)
+    except Exception as e:
+        flash(f'Erro ao carregar dados: {str(e)}', 'error')
+        return redirect(url_for('menu'))
 
 if __name__ == '__main__':
     app.run(debug=True)

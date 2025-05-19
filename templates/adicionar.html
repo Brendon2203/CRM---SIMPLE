@@ -70,18 +70,22 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Curso</label>
-                            <select name="curso" class="form-select">
+                            <label for="curso" class="form-label">Curso <span class="text-danger">*</span></label>
+                            <select class="form-select" id="curso" name="curso" required>
                                 <option value="">Selecione um curso</option>
-                                {% for curso in ['CTRL+KIDS', 'CTRL+TEENS', 'CTRL+YOUNG', 'CTRL+PRO'] %}
-                                <option value="{{ curso }}" {{ 'selected' if dados and dados.curso == curso else '' }}>
-                                    {{ curso }}
-                                </option>
-                                {% endfor %}
+                                <option value="Kids">Kids</option>
+                                <option value="Teens">Teens</option>
+                                <option value="Adult">Adult</option>
                             </select>
-                            <div class="invalid-feedback">
-                                Selecione um curso.
-                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tipo_aluno" class="form-label">Tipo de Aluno</label>
+                            <select class="form-select" id="tipo_aluno" name="tipo_aluno">
+                                <option value="">Selecione o tipo</option>
+                                <option value="cna">CNA</option>
+                                <option value="ctrlplay">CTRL+PLAY</option>
+                                <option value="nao">Não é Aluno</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Data da AE</label>

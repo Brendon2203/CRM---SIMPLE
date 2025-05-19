@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h2 class="h4 mb-0">Análise de Dados de Clientes</h2>
+            <a href="{{ url_for('menu') }}" class="btn btn-outline-light">
+                <i class="bi bi-arrow-left"></i> Voltar ao Menu
+            </a>
+        </div>
+        <div class="card-body">
+            <!-- Cards com Métricas Principais -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Total de Leads</h5>
+                            <h2 class="card-text">{{ total_leads }}</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Leads Convertidos</h5>
+                            <h2 class="card-text">{{ leads_convertidos }}</h2>
+                            <p class="card-text">{{ taxa_conversao }}%</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Alunos CNA</h5>
+                            <h2 class="card-text">{{ alunos_cna }}</h2>
+                            <p class="card-text">{{ taxa_cna }}%</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Taxa de Atendimento</h5>
+                            <h2 class="card-text">{{ taxa_atendimento }}%</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div class="row">
+                <!-- Gráfico de Origem dos Leads -->
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Origem dos Leads</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="origemLeadsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Status das Ligações -->
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Status das Ligações</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="statusLigacoesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Distribuição por Curso -->
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Distribuição por Curso</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="distribuicaoCursosChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Taxa de Conversão por Origem -->
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Efetividade por Origem do Lead</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Porcentagem de leads que se tornaram alunos em cada canal de captação</p>
+                            <canvas id="conversaoPorOrigemChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Incluir Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Dados para os gráficos
+    const origemLeadsData = {{ origem_leads|tojson|safe }};
+    const statusLigacoesData = {{ status_ligacoes|tojson|safe }};
+    const distribuicaoCursosData = {{ distribuicao_cursos|tojson|safe }};
+    const conversaoPorOrigemData = {{ conversao_por_origem|tojson|safe }};
+
+    // Gráfico de Origem dos Leads
+    new Chart(document.getElementById('origemLeadsChart'), {
+        type: 'pie',
+        data: {
+            labels: Object.keys(origemLeadsData),
+            datasets: [{
+                data: Object.values(origemLeadsData),
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#4BC0C0',
+                    '#9966FF'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right'
+                }
+            }
+        }
+    });
+
+    // Gráfico de Status das Ligações
+    new Chart(document.getElementById('statusLigacoesChart'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(statusLigacoesData),
+            datasets: [{
+                data: Object.values(statusLigacoesData),
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#4BC0C0'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right'
+                }
+            }
+        }
+    });
+
+    // Gráfico de Distribuição por Curso
+    new Chart(document.getElementById('distribuicaoCursosChart'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(distribuicaoCursosData),
+            datasets: [{
+                label: 'Quantidade de Alunos',
+                data: Object.values(distribuicaoCursosData),
+                backgroundColor: '#36A2EB'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Gráfico de Taxa de Conversão por Origem
+    new Chart(document.getElementById('conversaoPorOrigemChart'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(conversaoPorOrigemData),
+            datasets: [{
+                label: 'Taxa de Conversão (%)',
+                data: Object.values(conversaoPorOrigemData),
+                backgroundColor: '#4BC0C0'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %} 

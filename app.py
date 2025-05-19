@@ -112,6 +112,12 @@ def carregar_leads():
             print(f"Arquivo {PLANILHA_PATH} não encontrado!")
             return []
         df = pd.read_excel(PLANILHA_PATH)
+        
+        # Garante que a coluna 'Tipo aluno' existe
+        if 'Tipo aluno' not in df.columns:
+            df['Tipo aluno'] = ''
+            df.to_excel(PLANILHA_PATH, index=False)
+            
         leads = df.to_dict('records')
         print(f"Carregados {len(leads)} leads com sucesso!")
         return leads
@@ -419,6 +425,7 @@ def alterar_dados():
             df.loc[index, 'Observação'] = dados['observacao'].strip()
             df.loc[index, 'Ligação'] = dados['ligacao'].strip()
             df.loc[index, 'Lead'] = origem_lead
+            df.loc[index, 'Tipo aluno'] = dados['tipo_aluno'].strip()
             
             # Salva as alterações
             df.to_excel(PLANILHA_PATH, index=False)

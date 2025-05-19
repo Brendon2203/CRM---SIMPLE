@@ -1,5 +1,14 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+    .bg-cna { 
+        background-color: #ff9999 !important; 
+    }
+    .bg-ctrlplay { 
+        background-color: #ffb366 !important; 
+    }
+</style>
+
 <div class="container mt-4">
     <div class="card shadow">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -19,10 +28,25 @@
                 </div>
             </div>
 
+            <!-- Legendas -->
+            <div class="mb-3" style="padding-left: 7px;">
+                <p class="fw-bold mb-2">Legenda</p>
+                <div class="d-flex gap-3">
+                    <div class="d-flex align-items-center">
+                        <div style="width: 15px; height: 15px; background-color: orange; border: 1px solid black; margin-right: 5px;"></div>
+                        <span>ALUNO - CTRL+PLAY</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div style="width: 15px; height: 15px; background-color: red; border: 1px solid black; margin-right: 5px;"></div>
+                        <span>ALUNO - CNA</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tabela de Leads -->
             <div class="table-responsive">
-                <table class="table table-striped table-hover">
-                    <thead>
+                <table class="table table-hover">
+                    <thead class="table-light">
                         <tr>
                             <th>Nome do Responsável</th>
                             <th>Número</th>
@@ -36,7 +60,7 @@
                     </thead>
                     <tbody id="leadsTableBody">
                         {% for lead in leads %}
-                        <tr>
+                        <tr class="{% if lead['Tipo aluno'] == 'cna' %}bg-cna{% elif lead['Tipo aluno'] == 'ctrlplay' %}bg-ctrlplay{% endif %}" data-index="{{ loop.index0 }}">
                             <td>{{ lead['Nome do responsável'] }}</td>
                             <td>{{ lead['Número'] }}</td>
                             <td>{{ lead['Data de contato'] }}</td>
@@ -120,7 +144,7 @@
                             <label class="form-label">Ligação</label>
                             <select class="form-select" id="editLigacao" name="ligacao">
                                 <option value="">Selecione uma opção</option>
-                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu', 'Já é aluno'] %}
+                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu'] %}
                                 <option value="{{ status }}">{{ status }}</option>
                                 {% endfor %}
                             </select>
@@ -132,6 +156,15 @@
                                 {% for origem in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação'] %}
                                 <option value="{{ origem }}">{{ origem }}</option>
                                 {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">É aluno?</label>
+                            <select class="form-select" id="editTipoAluno" name="tipo_aluno" onchange="atualizarCorLinha()">
+                                <option value="">Selecione uma opção</option>
+                                <option value="nao">Não é aluno</option>
+                                <option value="cna">CNA</option>
+                                <option value="ctrlplay">CTRL+PLAY</option>
                             </select>
                         </div>
                         <div class="col-12">
@@ -156,15 +189,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
 
 <script>
-let leads = {{ leads|tojson|safe }};
+// Inicialização das variáveis globais
+const leadsData = {{ leads|tojson|safe }};
 let editModal;
-let allLeads = [...leads];
+let allLeads = [...leadsData];
+let linhaAtual = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     editModal = new bootstrap.Modal(document.getElementById('editModal'));
     
     // Adiciona máscaras aos campos
-    $('#editNumero').mask('(00)00000-0000');
+    $('#editNumero').mask('(00)00000-0000', {
+        onKeyPress: function(phone, e, field, options) {
+            var masks = ['(00)0000-0000', '(00)00000-0000'];
+            var mask = (phone.length > 14) ? masks[1] : masks[0];
+            $('#editNumero').mask(mask, options);
+        }
+    });
     $('#editDataContato').mask('00/00/0000');
     $('#editDataAE').mask('00/00/0000');
     $('#editHoraAE').mask('00:00');
@@ -182,21 +223,68 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('searchInput').addEventListener('keyup', function(e) {
         if (e.key === 'Enter') buscarLeads();
     });
-
-    // Validação de campos no formulário
-    document.getElementById('editForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        if (validarFormulario()) {
-            salvarAlteracoes();
-        }
-    });
 });
+
+function atualizarCorLinha() {
+    if (!linhaAtual) {
+        console.log('Linha atual não encontrada');
+        return;
+    }
+    
+    const tipoAluno = document.getElementById('editTipoAluno').value;
+    console.log('Tipo aluno selecionado:', tipoAluno);
+    console.log('Linha atual antes da mudança:', linhaAtual.className);
+    
+    // Remove classes de cor anteriores
+    linhaAtual.classList.remove('bg-cna', 'bg-ctrlplay');
+    
+    // Adiciona a nova cor baseada na seleção
+    if (tipoAluno === 'cna') {
+        linhaAtual.classList.add('bg-cna');
+        console.log('Adicionando classe bg-cna');
+    } else if (tipoAluno === 'ctrlplay') {
+        linhaAtual.classList.add('bg-ctrlplay');
+        console.log('Adicionando classe bg-ctrlplay');
+    }
+    
+    console.log('Linha atual depois da mudança:', linhaAtual.className);
+}
+
+function abrirModalEdicao(index) {
+    const lead = leadsData[index];
+    document.getElementById('leadIndex').value = index;
+    document.getElementById('editResponsavel').value = lead['Nome do responsável'] || '';
+    document.getElementById('editNumero').value = lead['Número'] || '';
+    document.getElementById('editDataContato').value = lead['Data de contato'] || '';
+    document.getElementById('editAluno').value = lead['Nome do aluno'] || '';
+    document.getElementById('editIdade').value = lead['Idade do aluno'] || '';
+    document.getElementById('editCurso').value = lead['Curso'] || '';
+    document.getElementById('editDataAE').value = lead['Data AE'] || '';
+    document.getElementById('editHoraAE').value = lead['Hora planejada AE'] || '';
+    document.getElementById('editChance').value = lead['Chances de fechar'] || '';
+    document.getElementById('editLigacao').value = lead['Ligação'] || '';
+    document.getElementById('editOrigemLead').value = lead['Lead'] || '';
+    document.getElementById('editObservacao').value = lead['Observação'] || '';
+    document.getElementById('editTipoAluno').value = lead['Tipo aluno'] || '';
+    
+    // Encontra a linha atual na tabela
+    linhaAtual = document.querySelector(`tr[data-index="${index}"]`);
+    console.log('Linha atual encontrada:', linhaAtual);
+    
+    // Adiciona o evento de mudança ao select
+    const selectTipoAluno = document.getElementById('editTipoAluno');
+    selectTipoAluno.removeEventListener('change', atualizarCorLinha); // Remove evento anterior se existir
+    selectTipoAluno.addEventListener('change', atualizarCorLinha);
+    
+    atualizarCorLinha();
+    editModal.show();
+}
 
 function validarFormulario() {
     // Validação do número de telefone
     const numero = document.getElementById('editNumero').value.trim();
     if (!numero || !numero.match(/^\(\d{2}\)[9]?\d{4}-\d{4}$/)) {
-        alert('Número de telefone inválido. Use o formato (XX)XXXXX-XXXX');
+        alert('Número de telefone inválido. Use o formato (XX)XXXX-XXXX ou (XX)XXXXX-XXXX');
         return false;
     }
 
@@ -266,24 +354,6 @@ function validarData(data) {
            dataObj.getFullYear() === ano;
 }
 
-function abrirModalEdicao(index) {
-    const lead = leads[index];
-    document.getElementById('leadIndex').value = index;
-    document.getElementById('editResponsavel').value = lead['Nome do responsável'] || '';
-    document.getElementById('editNumero').value = lead['Número'] || '';
-    document.getElementById('editDataContato').value = lead['Data de contato'] || '';
-    document.getElementById('editAluno').value = lead['Nome do aluno'] || '';
-    document.getElementById('editIdade').value = lead['Idade do aluno'] || '';
-    document.getElementById('editCurso').value = lead['Curso'] || '';
-    document.getElementById('editDataAE').value = lead['Data AE'] || '';
-    document.getElementById('editHoraAE').value = lead['Hora planejada AE'] || '';
-    document.getElementById('editChance').value = lead['Chances de fechar'] || '';
-    document.getElementById('editLigacao').value = lead['Ligação'] || '';
-    document.getElementById('editOrigemLead').value = lead['Lead'] || '';
-    document.getElementById('editObservacao').value = lead['Observação'] || '';
-    editModal.show();
-}
-
 function salvarAlteracoes() {
     if (!validarFormulario()) {
         return;
@@ -302,7 +372,8 @@ function salvarAlteracoes() {
         chance: document.getElementById('editChance').value,
         ligacao: document.getElementById('editLigacao').value,
         origem_lead: document.getElementById('editOrigemLead').value,
-        observacao: document.getElementById('editObservacao').value
+        observacao: document.getElementById('editObservacao').value,
+        tipo_aluno: document.getElementById('editTipoAluno').value
     };
 
     fetch('/alterar_dados', {
@@ -343,6 +414,15 @@ function buscarLeads() {
     
     matchingLeads.forEach((lead, index) => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-index', allLeads.indexOf(lead));
+        
+        // Adiciona a classe de cor baseada no tipo de aluno
+        if (lead['Tipo aluno'] === 'cna') {
+            tr.classList.add('bg-cna');
+        } else if (lead['Tipo aluno'] === 'ctrlplay') {
+            tr.classList.add('bg-ctrlplay');
+        }
+        
         tr.innerHTML = `
             <td>${lead['Nome do responsável'] || ''}</td>
             <td>${lead['Número'] || ''}</td>
@@ -373,6 +453,15 @@ function mostrarTodosLeads() {
     
     allLeads.forEach((lead, index) => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-index', index);
+        
+        // Adiciona a classe de cor baseada no tipo de aluno
+        if (lead['Tipo aluno'] === 'cna') {
+            tr.classList.add('bg-cna');
+        } else if (lead['Tipo aluno'] === 'ctrlplay') {
+            tr.classList.add('bg-ctrlplay');
+        }
+        
         tr.innerHTML = `
             <td>${lead['Nome do responsável'] || ''}</td>
             <td>${lead['Número'] || ''}</td>

@@ -124,7 +124,7 @@
                             <label class="form-label">Status da Ligação</label>
                             <select name="ligacao" class="form-select">
                                 <option value="">Selecione uma opção</option>
-                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu', 'Já é aluno'] %}
+                                {% for status in ['Não atendeu', 'Não Feita', 'Número inválido', 'Atendeu'] %}
                                 <option value="{{ status }}" {{ 'selected' if dados and dados.ligacao == status else '' }}>
                                     {{ status }}
                                 </option>

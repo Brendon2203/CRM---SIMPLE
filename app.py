@@ -6,6 +6,8 @@ import re
 import bcrypt
 from config import USERNAME, PASSWORD
 import locale
+import requests
+import shutil
 
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta'
@@ -22,6 +24,9 @@ except:
         locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
     except:
         pass
+
+# Configuração do Pipedrive
+PIPEDRIVE_API_TOKEN = 'c608bd29e6637e1bd3bbfa641fa818c70abf3204'
 
 def formatar_data(data_str):
     try:
@@ -524,6 +529,344 @@ def analise_dados():
     except Exception as e:
         flash(f'Erro ao carregar dados: {str(e)}', 'error')
         return redirect(url_for('menu'))
+
+def criar_backup():
+    """Cria um backup da planilha atual"""
+    # Cria a pasta backups no mesmo diretório do script
+    backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f'clientes_backup_{timestamp}.xlsx')
+    
+    # Copia o arquivo
+    shutil.copy2(PLANILHA_PATH, backup_path)
+    
+    # Retorna o caminho completo
+    return os.path.abspath(backup_path)
+
+@app.route('/exportar_pipedrive')
+@requer_admin
+def exportar_pipedrive():
+    try:
+        # Verifica se o token do Pipedrive está configurado
+        if not PIPEDRIVE_API_TOKEN:
+            flash('Token do Pipedrive não configurado. Por favor, configure o token na variável PIPEDRIVE_API_TOKEN.', 'error')
+            return redirect(url_for('menu'))
+
+        df = pd.read_excel(PLANILHA_PATH)
+        total_leads = len(df)
+        sucessos = 0
+        falhas = 0
+        detalhes_erros = []
+
+        # Testa a conexão com o Pipedrive
+        test_resp = requests.get(f'https://api.pipedrive.com/v1/users/me?api_token={PIPEDRIVE_API_TOKEN}')
+        if not test_resp.ok:
+            flash(f'Erro ao conectar com o Pipedrive: {test_resp.text}', 'error')
+            return redirect(url_for('menu'))
+
+        for index, row in df.iterrows():
+            try:
+                # Limpa os dados antes de enviar
+                nome = str(row['Nome do aluno'] if pd.notna(row['Nome do aluno']) else row['Nome do responsável']).strip()
+                if not nome:
+                    nome = "Lead sem nome"
+                numero = str(row['Número']).strip()
+                if not numero:
+                    detalhes_erros.append(f"Lead {index + 1} não tem número de telefone")
+                    falhas += 1
+                    print(f"[ERRO] Lead {index + 1}: número de telefone ausente. Dados: {row.to_dict()}")
+                    continue
+
+                # Cria o lead (pessoa) no Pipedrive
+                pessoa_payload = {
+                    'name': nome,
+                    'phone': numero,
+                }
+                print(f"[INFO] Enviando pessoa para Pipedrive: {pessoa_payload}")
+                pessoa_resp = requests.post(
+                    f'https://api.pipedrive.com/v1/persons?api_token={PIPEDRIVE_API_TOKEN}',
+                    json=pessoa_payload
+                )
+                print(f"[INFO] Resposta da criação de pessoa: {pessoa_resp.status_code} {pessoa_resp.text}")
+                pessoa_data = pessoa_resp.json()
+                if not pessoa_data.get('success'):
+                    erro = f"Erro ao criar pessoa para lead {index + 1}: {pessoa_data.get('error', 'Erro desconhecido')}"
+                    detalhes_erros.append(erro)
+                    falhas += 1
+                    continue
+                pessoa_id = pessoa_data['data']['id']
+
+                # Cria o lead com campos obrigatórios
+                lead_payload = {
+                    'title': nome,
+                    'person_id': pessoa_id,
+                    'expected_close_date': datetime.now().strftime("%Y-%m-%d"),
+                    'source': 'CRM',
+                    'label_ids': [],
+                    'visible_to': '3',
+                    'add_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                print(f"[INFO] Enviando lead para Pipedrive: {lead_payload}")
+                lead_resp = requests.post(
+                    f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}',
+                    json=lead_payload
+                )
+                print(f"[INFO] Resposta da criação de lead: {lead_resp.status_code} {lead_resp.text}")
+                lead_data = lead_resp.json()
+                if not lead_data.get('success'):
+                    erro = f"Erro ao criar lead para pessoa {pessoa_id}: {lead_data.get('error', 'Erro desconhecido')}"
+                    detalhes_erros.append(erro)
+                    falhas += 1
+                    continue
+                lead_id = lead_data['data']['id']
+
+                # Prepara os dados para a nota
+                nota_dados = {
+                    'Responsável': str(row['Nome do responsável']).strip() if pd.notna(row['Nome do responsável']) else 'N/A',
+                    'Idade do Aluno': str(row['Idade do aluno']).strip() if pd.notna(row['Idade do aluno']) else 'N/A',
+                    'Curso': str(row['Curso']).strip() if pd.notna(row['Curso']) else 'N/A',
+                    'Tipo de Aluno': str(row['Tipo aluno']).strip() if pd.notna(row['Tipo aluno']) else 'N/A',
+                    'Data AE': str(row['Data AE']).strip() if pd.notna(row['Data AE']) else 'N/A',
+                    'Hora AE': str(row['Hora planejada AE']).strip() if pd.notna(row['Hora planejada AE']) else 'N/A',
+                    'Chances de Fechar': str(row['Chances de fechar']).strip() if pd.notna(row['Chances de fechar']) else 'N/A',
+                    'Status da Ligação': str(row['Ligação']).strip() if pd.notna(row['Ligação']) else 'N/A',
+                    'Origem do Lead': str(row['Lead']).strip() if pd.notna(row['Lead']) else 'N/A',
+                    'Observações': str(row['Observação']).strip() if pd.notna(row['Observação']) else 'N/A'
+                }
+                note = "\n".join([f"{k}: {v}" for k, v in nota_dados.items()])
+                note_payload = {
+                    'content': note,
+                    'lead_id': lead_id
+                }
+                print(f"[INFO] Enviando nota para Pipedrive: {note_payload}")
+                note_resp = requests.post(
+                    f'https://api.pipedrive.com/v1/notes?api_token={PIPEDRIVE_API_TOKEN}',
+                    json=note_payload
+                )
+                print(f"[INFO] Resposta da criação de nota: {note_resp.status_code} {note_resp.text}")
+                if note_resp.status_code in [200, 201]:
+                    sucessos += 1
+                else:
+                    erro = f"Erro ao adicionar nota para lead {lead_id}: {note_resp.text}"
+                    detalhes_erros.append(erro)
+                    falhas += 1
+
+            except Exception as e:
+                erro = f"Erro ao processar lead {index + 1}: {str(e)}"
+                detalhes_erros.append(erro)
+                falhas += 1
+                print(f"[ERRO] Exceção ao processar lead {index + 1}: {str(e)}")
+                continue
+
+        mensagem = f"""
+Exportação concluída!
+Total de leads processados: {total_leads}
+Leads exportados com sucesso: {sucessos}
+Falhas: {falhas}
+"""
+        if detalhes_erros:
+            mensagem += "\nDetalhes dos erros:\n" + "\n".join(detalhes_erros)
+
+        flash(mensagem, 'success' if falhas == 0 else 'warning')
+    except Exception as e:
+        flash(f'Erro ao exportar para o Pipedrive: {str(e)}', 'error')
+    
+    return redirect(url_for('menu'))
+
+@app.route('/importar_pipedrive')
+@requer_admin
+def importar_pipedrive():
+    try:
+        # Verifica se o token do Pipedrive está configurado
+        if not PIPEDRIVE_API_TOKEN:
+            flash('Token do Pipedrive não configurado. Por favor, configure o token na variável PIPEDRIVE_API_TOKEN.', 'error')
+            return redirect(url_for('menu'))
+
+        # Cria backup antes de importar
+        backup_path = criar_backup()
+        
+        # Testa a conexão com o Pipedrive
+        test_resp = requests.get(f'https://api.pipedrive.com/v1/users/me?api_token={PIPEDRIVE_API_TOKEN}')
+        if not test_resp.ok:
+            flash(f'Erro ao conectar com o Pipedrive: {test_resp.text}', 'error')
+            return redirect(url_for('menu'))
+        
+        # Obtém todos os leads do Pipedrive
+        leads_resp = requests.get(f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}')
+        leads = leads_resp.json()
+        print(f"[IMPORTAÇÃO] Leads retornados pela API: {len(leads.get('data', []))}")
+        if leads.get('data'):
+            for l in leads['data']:
+                person_id_raw = l.get('person_id')
+                if isinstance(person_id_raw, dict):
+                    person_id = person_id_raw.get('value')
+                else:
+                    person_id = person_id_raw
+                print(f"[IMPORTAÇÃO] Lead ID: {l.get('id')}, Título: {l.get('title')}, Person ID: {person_id}")
+        
+        if not leads.get('success'):
+            flash(f'Erro ao buscar leads do Pipedrive: {leads.get("error", "Erro desconhecido")}', 'error')
+            return redirect(url_for('menu'))
+            
+        if not leads.get('data'):
+            flash(f'Nenhum lead encontrado no Pipedrive. Backup criado em: {backup_path}', 'warning')
+            return redirect(url_for('menu'))
+        
+        df = pd.read_excel(PLANILHA_PATH)
+        numeros_existentes = set(df['Número'].astype(str).str.strip())
+        novos_leads = 0
+        detalhes_importacao = []
+        
+        for lead in leads['data']:
+            try:
+                lead_id = lead['id']
+                lead_title = lead.get('title', '')
+                person_id_raw = lead.get('person_id')
+                if isinstance(person_id_raw, dict):
+                    person_id = person_id_raw.get('value')
+                else:
+                    person_id = person_id_raw
+                if not person_id:
+                    detalhes_importacao.append(f"Lead {lead_id} não tem pessoa associada")
+                    print(f"[IMPORTAÇÃO] Lead {lead_id} ignorado: sem pessoa associada.")
+                    continue
+                    
+                # Busca dados da pessoa
+                person_resp = requests.get(f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={PIPEDRIVE_API_TOKEN}')
+                person_data = person_resp.json()
+                
+                if not person_data.get('success'):
+                    detalhes_importacao.append(f"Erro ao buscar pessoa {person_id}: {person_data.get('error', 'Erro desconhecido')}")
+                    print(f"[IMPORTAÇÃO] Erro ao buscar pessoa {person_id}: {person_data.get('error', 'Erro desconhecido')}")
+                    continue
+                
+                # Extrai telefone
+                phones = person_data['data'].get('phone', [])
+                if not phones or not isinstance(phones, list):
+                    detalhes_importacao.append(f"Pessoa {person_id} não tem telefone")
+                    print(f"[IMPORTAÇÃO] Pessoa {person_id} ignorada: sem telefone.")
+                    continue
+                    
+                phone = phones[0].get('value', '').strip()
+                print(f"[IMPORTAÇÃO] Lead {lead_id} - Telefone encontrado: {phone}")
+                if not phone:
+                    detalhes_importacao.append(f"Telefone vazio para pessoa {person_id}")
+                    print(f"[IMPORTAÇÃO] Pessoa {person_id} ignorada: telefone vazio.")
+                    continue
+                    
+                if phone in numeros_existentes:
+                    detalhes_importacao.append(f"Telefone {phone} já existe no sistema")
+                    print(f"[IMPORTAÇÃO] Lead {lead_id} ignorado: telefone já existe no sistema.")
+                    continue
+                
+                # Busca notas
+                notes_resp = requests.get(f'https://api.pipedrive.com/v1/notes?lead_id={lead_id}&api_token={PIPEDRIVE_API_TOKEN}')
+                notes_data = notes_resp.json()
+                
+                if not notes_data.get('success'):
+                    detalhes_importacao.append(f"Erro ao buscar notas do lead {lead_id}: {notes_data.get('error', 'Erro desconhecido')}")
+                    continue
+                
+                note_content = ''
+                if notes_data.get('data'):
+                    note_content = notes_data['data'][0].get('content', '')
+                
+                # Extrai informações da nota
+                info = {}
+                for line in note_content.split('\n'):
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        info[key.strip()] = value.strip()
+                
+                novo_lead = {
+                    "Nome do responsável": info.get('Responsável', ''),
+                    "Número": phone,
+                    "Data de contato": datetime.now().strftime("%d/%m/%Y"),
+                    "Nome do aluno": lead_title,
+                    "Idade do aluno": info.get('Idade do Aluno', ''),
+                    "Curso": info.get('Curso', ''),
+                    "Data AE": info.get('Data AE', ''),
+                    "Hora planejada AE": info.get('Hora AE', ''),
+                    "Observação": info.get('Observações', ''),
+                    "Chances de fechar": info.get('Chances de Fechar', ''),
+                    "Ligação": info.get('Status da Ligação', ''),
+                    "Lead": info.get('Origem do Lead', ''),
+                    "Tipo aluno": info.get('Tipo de Aluno', '')
+                }
+                
+                df = pd.concat([df, pd.DataFrame([novo_lead])], ignore_index=True)
+                novos_leads += 1
+                detalhes_importacao.append(f"Lead {lead_id} importado com sucesso")
+                
+            except Exception as e:
+                detalhes_importacao.append(f"Erro ao processar lead {lead.get('id', 'desconhecido')}: {str(e)}")
+                continue
+        
+        if novos_leads > 0:
+            df.to_excel(PLANILHA_PATH, index=False)
+            mensagem = f"""
+Importação concluída!
+Backup criado em: {backup_path}
+Novos leads importados: {novos_leads}
+Total de leads processados: {len(leads['data'])}
+"""
+            if detalhes_importacao:
+                mensagem += "\nDetalhes da importação:\n" + "\n".join(detalhes_importacao)
+            
+            flash(mensagem, 'success')
+        else:
+            flash(f'Nenhum novo lead para importar. Backup criado em: {backup_path}', 'info')
+            
+    except Exception as e:
+        flash(f'Erro ao importar do Pipedrive: {str(e)}', 'error')
+    
+    return redirect(url_for('menu'))
+
+@app.route('/backups')
+@requer_admin
+def listar_backups():
+    try:
+        # Obtém o diretório de backups
+        backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+        
+        # Lista todos os arquivos de backup
+        backups = []
+        if os.path.exists(backup_dir):
+            for arquivo in os.listdir(backup_dir):
+                if arquivo.endswith('.xlsx'):
+                    caminho_completo = os.path.join(backup_dir, arquivo)
+                    data_criacao = datetime.fromtimestamp(os.path.getctime(caminho_completo))
+                    backups.append({
+                        'nome': arquivo,
+                        'data': data_criacao.strftime("%d/%m/%Y %H:%M:%S"),
+                        'caminho': caminho_completo
+                    })
+        
+        # Ordena por data (mais recente primeiro)
+        backups.sort(key=lambda x: x['data'], reverse=True)
+        
+        return render_template('backups.html', backups=backups)
+    except Exception as e:
+        flash(f'Erro ao listar backups: {str(e)}', 'error')
+        return redirect(url_for('menu'))
+
+@app.route('/baixar_backup/<path:nome_arquivo>')
+@requer_admin
+def baixar_backup(nome_arquivo):
+    try:
+        backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+        caminho_arquivo = os.path.join(backup_dir, nome_arquivo)
+        
+        if os.path.exists(caminho_arquivo):
+            return send_file(caminho_arquivo, as_attachment=True)
+        else:
+            flash('Arquivo de backup não encontrado.', 'error')
+            return redirect(url_for('listar_backups'))
+    except Exception as e:
+        flash(f'Erro ao baixar backup: {str(e)}', 'error')
+        return redirect(url_for('listar_backups'))
 
 if __name__ == '__main__':
     app.run(debug=True)

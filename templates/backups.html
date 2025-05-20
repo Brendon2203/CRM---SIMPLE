@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h2 class="h4 mb-0">Backups do Sistema</h2>
+            <a href="{{ url_for('menu') }}" class="btn btn-outline-light">
+                <i class="bi bi-arrow-left"></i> Voltar ao Menu
+            </a>
+        </div>
+        <div class="card-body">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% if backups %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Nome do Arquivo</th>
+                                <th>Data de Criação</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for backup in backups %}
+                                <tr>
+                                    <td>{{ backup.nome }}</td>
+                                    <td>{{ backup.data }}</td>
+                                    <td>
+                                        <a href="{{ url_for('baixar_backup', nome_arquivo=backup.nome) }}" 
+                                           class="btn btn-primary btn-sm">
+                                            <i class="bi bi-download"></i> Baixar
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    Nenhum backup encontrado.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

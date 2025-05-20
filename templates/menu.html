@@ -1,114 +1,195 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="container mt-4">
-    <div class="card shadow">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h2 class="h4 mb-0">Menu Principal</h2>
-            <div>
-                <span class="me-3">
-                    <i class="bi bi-person-circle"></i> 
-                    {{ user.usuario }}
-                    {% if user.funcao == 'admin' %}
-                    <span class="badge bg-light text-primary">Admin</span>
-                    {% else %}
-                    <span class="badge bg-light text-secondary">Funcionário</span>
-                    {% endif %}
-                </span>
-                <a href="{{ url_for('logout') }}" class="btn btn-outline-light">
-                    <i class="bi bi-box-arrow-right"></i> Sair
-                </a>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu Principal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        .card {
+            transition: transform 0.2s;
+            margin-bottom: 20px;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .alert {
+            margin-top: 20px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="text-center">Menu Principal</h1>
+                <p class="text-center text-muted">Bem-vindo, {{ user.usuario }}!</p>
             </div>
         </div>
-        <div class="card-body">
-            <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-person-plus-fill display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Adicionar Lead</h5>
-                            <p class="card-text">Cadastrar um novo lead no sistema</p>
-                            <a href="{{ url_for('adicionar') }}" class="btn btn-primary">
-                                <i class="bi bi-plus-circle"></i> Adicionar Lead
-                            </a>
-                        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="container mt-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h2 class="h4 mb-0">Menu Principal</h2>
+                    <div>
+                        <span class="me-3">
+                            <i class="bi bi-person-circle"></i> 
+                            {{ user.usuario }}
+                            {% if user.funcao == 'admin' %}
+                            <span class="badge bg-light text-primary">Admin</span>
+                            {% else %}
+                            <span class="badge bg-light text-secondary">Funcionário</span>
+                            {% endif %}
+                        </span>
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-light">
+                            <i class="bi bi-box-arrow-right"></i> Sair
+                        </a>
                     </div>
                 </div>
-                {% if user.funcao == 'admin' %}
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-pencil-square display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Alterar Dados</h5>
-                            <p class="card-text">Modificar informações dos leads</p>
-                            <a href="{{ url_for('alterar_dados') }}" class="btn btn-primary">
-                                <i class="bi bi-pencil"></i> Alterar Dados
-                            </a>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-person-plus-fill display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Adicionar Lead</h5>
+                                    <p class="card-text">Cadastrar um novo lead no sistema</p>
+                                    <a href="{{ url_for('adicionar') }}" class="btn btn-primary">
+                                        <i class="bi bi-plus-circle"></i> Adicionar Lead
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-people-fill display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Usuários</h5>
-                            <p class="card-text">Gerenciar usuários do sistema</p>
-                            <a href="{{ url_for('usuarios') }}" class="btn btn-primary">
-                                <i class="bi bi-person-gear"></i> Gerenciar Usuários
-                            </a>
+                        {% if user.funcao == 'admin' %}
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-pencil-square display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Alterar Dados</h5>
+                                    <p class="card-text">Modificar informações dos leads</p>
+                                    <a href="{{ url_for('alterar_dados') }}" class="btn btn-primary">
+                                        <i class="bi bi-pencil"></i> Alterar Dados
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                {% endif %}
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-chat-dots-fill display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Mensagem de Agendamento</h5>
-                            <p class="card-text">Gerar mensagem para aula experimental</p>
-                            <a href="{{ url_for('mensagem_agendamento') }}" class="btn btn-primary">
-                                <i class="bi bi-chat-dots"></i> Mensagem de Agendamento
-                            </a>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-people-fill display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Usuários</h5>
+                                    <p class="card-text">Gerenciar usuários do sistema</p>
+                                    <a href="{{ url_for('usuarios') }}" class="btn btn-primary">
+                                        <i class="bi bi-person-gear"></i> Gerenciar Usuários
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-check-circle-fill display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Mensagem de Confirmação</h5>
-                            <p class="card-text">Gerar mensagem de confirmação</p>
-                            <a href="{{ url_for('mensagem_confirmacao') }}" class="btn btn-primary">
-                                <i class="bi bi-check-circle"></i> Mensagem de Confirmação
-                            </a>
+                        {% endif %}
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-chat-dots-fill display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Mensagem de Agendamento</h5>
+                                    <p class="card-text">Gerar mensagem para aula experimental</p>
+                                    <a href="{{ url_for('mensagem_agendamento') }}" class="btn btn-primary">
+                                        <i class="bi bi-chat-dots"></i> Mensagem de Agendamento
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-download display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Baixar Planilha</h5>
-                            <p class="card-text">Fazer download da planilha de leads</p>
-                            <a href="{{ url_for('baixar') }}" class="btn btn-primary">
-                                <i class="bi bi-download"></i> Baixar Planilha
-                            </a>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-check-circle-fill display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Mensagem de Confirmação</h5>
+                                    <p class="card-text">Gerar mensagem de confirmação</p>
+                                    <a href="{{ url_for('mensagem_confirmacao') }}" class="btn btn-primary">
+                                        <i class="bi bi-check-circle"></i> Mensagem de Confirmação
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-graph-up display-4 text-primary mb-3"></i>
-                            <h5 class="card-title">Análise de Dados</h5>
-                            <p class="card-text">Visualize métricas e estatísticas dos leads.</p>
-                            <a href="{{ url_for('analise_dados') }}" class="btn btn-primary">
-                                <i class="bi bi-graph-up"></i> Analisar
-                            </a>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-download display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Baixar Planilha</h5>
+                                    <p class="card-text">Fazer download da planilha de leads</p>
+                                    <a href="{{ url_for('baixar') }}" class="btn btn-primary">
+                                        <i class="bi bi-download"></i> Baixar Planilha
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-graph-up display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Análise de Dados</h5>
+                                    <p class="card-text">Visualize métricas e estatísticas dos leads.</p>
+                                    <a href="{{ url_for('analise_dados') }}" class="btn btn-primary">
+                                        <i class="bi bi-graph-up"></i> Analisar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-cloud-upload display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Exportar para Pipedrive</h5>
+                                    <p class="card-text">Envie todos os leads para o Pipedrive.</p>
+                                    <a href="{{ url_for('exportar_pipedrive') }}" class="btn btn-primary">
+                                        <i class="bi bi-cloud-upload"></i> Exportar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-cloud-download display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Importar do Pipedrive</h5>
+                                    <p class="card-text">Importe leads do Pipedrive para o sistema.</p>
+                                    <a href="{{ url_for('importar_pipedrive') }}" class="btn btn-primary">
+                                        <i class="bi bi-cloud-download"></i> Importar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-archive display-4 text-primary mb-3"></i>
+                                    <h5 class="card-title">Gerenciar Backups</h5>
+                                    <p class="card-text">Visualize e baixe versões de backup dos seus dados.</p>
+                                    <a href="{{ url_for('listar_backups') }}" class="btn btn-primary">
+                                        <i class="bi bi-archive"></i> Gerenciar Backups
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
+</body>
+</html>
 {% endblock %}

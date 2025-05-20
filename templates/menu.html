@@ -167,7 +167,7 @@
                                     <i class="bi bi-cloud-download display-4 text-primary mb-3"></i>
                                     <h5 class="card-title">Importar do Pipedrive</h5>
                                     <p class="card-text">Importe leads do Pipedrive para o sistema.</p>
-                                    <a href="{{ url_for('importar_pipedrive') }}" class="btn btn-primary">
+                                    <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importarModal">
                                         <i class="bi bi-cloud-download"></i> Importar
                                     </a>
                                 </div>
@@ -189,6 +189,48 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Modal de Opções de Importação -->
+    <div class="modal fade" id="importarModal" tabindex="-1" aria-labelledby="importarModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importarModalLabel">Importação do Pipedrive</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body text-center">
+            <p>O que deseja fazer?</p>
+            <div class="d-grid gap-2">
+              <button class="btn btn-success" id="btnImportarBanco" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#confirmarImportacaoModal">
+                <i class="bi bi-cloud-upload"></i> Importar para o banco de dados
+              </button>
+              <a href="{{ url_for('visualizar_importacao') }}" class="btn btn-info">
+                <i class="bi bi-eye"></i> Visualizar importação
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div class="modal fade" id="confirmarImportacaoModal" tabindex="-1" aria-labelledby="confirmarImportacaoModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="confirmarImportacaoModalLabel">Confirmar Importação</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <p>Tem certeza que deseja importar os dados do Pipedrive para o banco de dados?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button>
+            <a href="{{ url_for('importar_pipedrive') }}" class="btn btn-success">Sim, importar</a>
+          </div>
+        </div>
+      </div>
     </div>
 </body>
 </html>

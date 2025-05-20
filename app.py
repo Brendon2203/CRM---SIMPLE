@@ -726,6 +726,9 @@ def importar_pipedrive():
             try:
                 lead_id = lead['id']
                 lead_title = lead.get('title', '')
+                # Remover 'Lead ' do início do título, se existir
+                if lead_title.lower().startswith('lead '):
+                    lead_title = lead_title[5:].strip()
                 person_id_raw = lead.get('person_id')
                 if isinstance(person_id_raw, dict):
                     person_id = person_id_raw.get('value')
@@ -751,14 +754,21 @@ def importar_pipedrive():
                     detalhes_importacao.append(f"Pessoa {person_id} não tem telefone")
                     print(f"[IMPORTAÇÃO] Pessoa {person_id} ignorada: sem telefone.")
                     continue
-                    
                 phone = phones[0].get('value', '').strip()
+                # NOVO: Remover 55 se for número brasileiro
+                if phone.startswith('55'):
+                    phone = phone[2:].strip()
+                    # Remove espaços e formata para (xx)xxxxx-xxxx ou (xx)xxxx-xxxx
+                    phone = phone.replace(' ', '').replace('-', '')
+                    if len(phone) == 11:
+                        phone = f'({phone[:2]}){phone[2:7]}-{phone[7:]}'
+                    elif len(phone) == 10:
+                        phone = f'({phone[:2]}){phone[2:6]}-{phone[6:]}'
                 print(f"[IMPORTAÇÃO] Lead {lead_id} - Telefone encontrado: {phone}")
                 if not phone:
                     detalhes_importacao.append(f"Telefone vazio para pessoa {person_id}")
                     print(f"[IMPORTAÇÃO] Pessoa {person_id} ignorada: telefone vazio.")
                     continue
-                    
                 if phone in numeros_existentes:
                     detalhes_importacao.append(f"Telefone {phone} já existe no sistema")
                     print(f"[IMPORTAÇÃO] Lead {lead_id} ignorado: telefone já existe no sistema.")
@@ -784,10 +794,10 @@ def importar_pipedrive():
                         info[key.strip()] = value.strip()
                 
                 novo_lead = {
-                    "Nome do responsável": info.get('Responsável', ''),
+                    "Nome do responsável": lead_title,  # Agora o título vai para responsável sem 'Lead '
                     "Número": phone,
                     "Data de contato": datetime.now().strftime("%d/%m/%Y"),
-                    "Nome do aluno": lead_title,
+                    "Nome do aluno": info.get('Responsável', ''),  # O que vier da nota vai para aluno
                     "Idade do aluno": info.get('Idade do Aluno', ''),
                     "Curso": info.get('Curso', ''),
                     "Data AE": info.get('Data AE', ''),
@@ -795,7 +805,7 @@ def importar_pipedrive():
                     "Observação": info.get('Observações', ''),
                     "Chances de fechar": info.get('Chances de Fechar', ''),
                     "Ligação": info.get('Status da Ligação', ''),
-                    "Lead": 'Pipedrive',  # Forçar sempre
+                    "Lead": 'Pipedrive',
                     "Tipo aluno": info.get('Tipo de Aluno', '')
                 }
                 
@@ -870,6 +880,157 @@ def baixar_backup(nome_arquivo):
     except Exception as e:
         flash(f'Erro ao baixar backup: {str(e)}', 'error')
         return redirect(url_for('listar_backups'))
+
+@app.route('/visualizar_importacao')
+@requer_admin
+def visualizar_importacao():
+    try:
+        # Busca os leads do Pipedrive (igual à importação, mas sem salvar)
+        if not PIPEDRIVE_API_TOKEN:
+            flash('Token do Pipedrive não configurado. Por favor, configure o token na variável PIPEDRIVE_API_TOKEN.', 'error')
+            return redirect(url_for('menu'))
+        leads_resp = requests.get(f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}')
+        leads = leads_resp.json()
+        if not leads.get('success') or not leads.get('data'):
+            flash('Nenhum lead encontrado no Pipedrive.', 'warning')
+            return redirect(url_for('menu'))
+        dados_importacao = []
+        for lead in leads['data']:
+            try:
+                lead_id = lead['id']
+                lead_title = lead.get('title', '')
+                if lead_title.lower().startswith('lead '):
+                    lead_title = lead_title[5:].strip()
+                person_id_raw = lead.get('person_id')
+                if isinstance(person_id_raw, dict):
+                    person_id = person_id_raw.get('value')
+                else:
+                    person_id = person_id_raw
+                if not person_id:
+                    continue
+                person_resp = requests.get(f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={PIPEDRIVE_API_TOKEN}')
+                person_data = person_resp.json()
+                if not person_data.get('success'):
+                    continue
+                phones = person_data['data'].get('phone', [])
+                if not phones or not isinstance(phones, list):
+                    continue
+                phone = phones[0].get('value', '').strip()
+                if phone.startswith('55'):
+                    phone = phone[2:].strip()
+                    phone = phone.replace(' ', '').replace('-', '')
+                    if len(phone) == 11:
+                        phone = f'({phone[:2]}){phone[2:7]}-{phone[7:]}'
+                    elif len(phone) == 10:
+                        phone = f'({phone[:2]}){phone[2:6]}-{phone[6:]}'
+                notes_resp = requests.get(f'https://api.pipedrive.com/v1/notes?lead_id={lead_id}&api_token={PIPEDRIVE_API_TOKEN}')
+                notes_data = notes_resp.json()
+                note_content = ''
+                if notes_data.get('data'):
+                    note_content = notes_data['data'][0].get('content', '')
+                info = {}
+                for line in note_content.split('\n'):
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        info[key.strip()] = value.strip()
+                dados_importacao.append({
+                    "Nome do responsável": lead_title,
+                    "Número": phone,
+                    "Data de contato": datetime.now().strftime("%d/%m/%Y"),
+                    "Nome do aluno": info.get('Responsável', ''),
+                    "Idade do aluno": info.get('Idade do Aluno', ''),
+                    "Curso": info.get('Curso', ''),
+                    "Data AE": info.get('Data AE', ''),
+                    "Hora planejada AE": info.get('Hora AE', ''),
+                    "Observação": info.get('Observações', ''),
+                    "Chances de fechar": info.get('Chances de Fechar', ''),
+                    "Ligação": info.get('Status da Ligação', ''),
+                    "Lead": 'Pipedrive',
+                    "Tipo aluno": info.get('Tipo de Aluno', '')
+                })
+            except Exception as e:
+                continue
+        return render_template('visualizar_importacao.html', leads=dados_importacao)
+    except Exception as e:
+        flash(f'Erro ao visualizar importação: {str(e)}', 'error')
+        return redirect(url_for('menu'))
+
+@app.route('/baixar_importacao')
+@requer_admin
+def baixar_importacao():
+    try:
+        # Gera a planilha temporária com os dados da importação
+        if not PIPEDRIVE_API_TOKEN:
+            flash('Token do Pipedrive não configurado.', 'error')
+            return redirect(url_for('menu'))
+        leads_resp = requests.get(f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}')
+        leads = leads_resp.json()
+        dados_importacao = []
+        for lead in leads.get('data', []):
+            try:
+                lead_id = lead['id']
+                lead_title = lead.get('title', '')
+                if lead_title.lower().startswith('lead '):
+                    lead_title = lead_title[5:].strip()
+                person_id_raw = lead.get('person_id')
+                if isinstance(person_id_raw, dict):
+                    person_id = person_id_raw.get('value')
+                else:
+                    person_id = person_id_raw
+                if not person_id:
+                    continue
+                person_resp = requests.get(f'https://api.pipedrive.com/v1/persons/{person_id}?api_token={PIPEDRIVE_API_TOKEN}')
+                person_data = person_resp.json()
+                if not person_data.get('success'):
+                    continue
+                phones = person_data['data'].get('phone', [])
+                if not phones or not isinstance(phones, list):
+                    continue
+                phone = phones[0].get('value', '').strip()
+                if phone.startswith('55'):
+                    phone = phone[2:].strip()
+                    phone = phone.replace(' ', '').replace('-', '')
+                    if len(phone) == 11:
+                        phone = f'({phone[:2]}){phone[2:7]}-{phone[7:]}'
+                    elif len(phone) == 10:
+                        phone = f'({phone[:2]}){phone[2:6]}-{phone[6:]}'
+                notes_resp = requests.get(f'https://api.pipedrive.com/v1/notes?lead_id={lead_id}&api_token={PIPEDRIVE_API_TOKEN}')
+                notes_data = notes_resp.json()
+                note_content = ''
+                if notes_data.get('data'):
+                    note_content = notes_data['data'][0].get('content', '')
+                info = {}
+                for line in note_content.split('\n'):
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        info[key.strip()] = value.strip()
+                dados_importacao.append({
+                    "Nome do responsável": lead_title,
+                    "Número": phone,
+                    "Data de contato": datetime.now().strftime("%d/%m/%Y"),
+                    "Nome do aluno": info.get('Responsável', ''),
+                    "Idade do aluno": info.get('Idade do Aluno', ''),
+                    "Curso": info.get('Curso', ''),
+                    "Data AE": info.get('Data AE', ''),
+                    "Hora planejada AE": info.get('Hora AE', ''),
+                    "Observação": info.get('Observações', ''),
+                    "Chances de fechar": info.get('Chances de Fechar', ''),
+                    "Ligação": info.get('Status da Ligação', ''),
+                    "Lead": 'Pipedrive',
+                    "Tipo aluno": info.get('Tipo de Aluno', '')
+                })
+            except Exception as e:
+                continue
+        import pandas as pd
+        import tempfile
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        df = pd.DataFrame(dados_importacao)
+        df.to_excel(temp.name, index=False)
+        temp.seek(0)
+        return send_file(temp.name, as_attachment=True, download_name='importacao_pipedrive.xlsx')
+    except Exception as e:
+        flash(f'Erro ao baixar planilha da importação: {str(e)}', 'error')
+        return redirect(url_for('menu'))
 
 if __name__ == '__main__':
     app.run(debug=True)

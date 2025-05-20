@@ -715,6 +715,9 @@ def importar_pipedrive():
             return redirect(url_for('menu'))
         
         df = pd.read_excel(PLANILHA_PATH)
+        # Garante que a coluna 'Lead' existe
+        if 'Lead' not in df.columns:
+            df['Lead'] = ''
         numeros_existentes = set(df['Número'].astype(str).str.strip())
         novos_leads = 0
         detalhes_importacao = []
@@ -792,7 +795,7 @@ def importar_pipedrive():
                     "Observação": info.get('Observações', ''),
                     "Chances de fechar": info.get('Chances de Fechar', ''),
                     "Ligação": info.get('Status da Ligação', ''),
-                    "Lead": info.get('Origem do Lead', ''),
+                    "Lead": 'Pipedrive',  # Forçar sempre
                     "Tipo aluno": info.get('Tipo de Aluno', '')
                 }
                 

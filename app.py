@@ -8,6 +8,8 @@ from config import USERNAME, PASSWORD
 import locale
 import requests
 import shutil
+from database import Database
+import logging
 
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta'
@@ -27,6 +29,16 @@ except:
 
 # Configuração do Pipedrive
 PIPEDRIVE_API_TOKEN = 'c608bd29e6637e1bd3bbfa641fa818c70abf3204'
+PIPEDRIVE_DOMAIN = 'ctrlplay'  # Domínio da sua empresa no Pipedrive
+PIPEDRIVE_API_URL = f'https://{PIPEDRIVE_DOMAIN}.pipedrive.com/api/v1'
+
+# Configuração do logger para exportação Pipedrive
+logger = logging.getLogger('exportar_pipedrive')
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler('export_pipedrive.log', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+if not logger.hasHandlers():
+    logger.addHandler(file_handler)
 
 def formatar_data(data_str):
     try:
@@ -70,11 +82,83 @@ def carregar_dados():
         df['data'] = pd.to_datetime(df['data'], format='%d/%m/%Y', errors='coerce')
     return df
 
+def verificar_permissao_arquivo(caminho):
+    """Verifica se o arquivo tem permissões de escrita"""
+    try:
+        if os.path.exists(caminho):
+            return os.access(caminho, os.W_OK)
+        return os.access(os.path.dirname(caminho), os.W_OK)
+    except Exception as e:
+        print(f"Erro ao verificar permissões: {str(e)}")
+        return False
+
+def salvar_dados_seguro(df, caminho_arquivo):
+    """Salva os dados de forma segura usando arquivos temporários"""
+    try:
+        # Cria um diretório temporário
+        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Gera um nome único para o arquivo temporário
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_file = os.path.join(temp_dir, f'temp_{timestamp}.xlsx')
+        
+        # Salva primeiro no arquivo temporário
+        df.to_excel(temp_file, index=False)
+        
+        # Se o arquivo original existe, faz backup
+        if os.path.exists(caminho_arquivo):
+            backup_path = criar_backup()
+            print(f"Backup criado em: {backup_path}")
+        
+        # Move o arquivo temporário para o destino final
+        shutil.move(temp_file, caminho_arquivo)
+        
+        # Limpa arquivos temporários antigos (mais de 1 hora)
+        for file in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, file)
+            if os.path.getctime(file_path) < (datetime.now().timestamp() - 3600):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+        
+        return True
+    except Exception as e:
+        print(f"Erro ao salvar dados: {str(e)}")
+        return False
+
 def salvar_dados(df):
-    # Garantir que a data seja salva no formato DD/MM/YYYY
-    if 'data' in df.columns:
-        df['data'] = df['data'].dt.strftime('%d/%m/%Y')
-    df.to_excel(PLANILHA_PATH, index=False)
+    """Função principal para salvar dados"""
+    try:
+        # Verifica permissões antes de tentar salvar
+        if not verificar_permissao_arquivo(PLANILHA_PATH):
+            print("Sem permissão para escrever no arquivo")
+            return False
+            
+        # Garantir que a data seja salva no formato DD/MM/YYYY
+        if 'data' in df.columns:
+            df['data'] = df['data'].dt.strftime('%d/%m/%Y')
+        
+        # Tenta salvar usando o método seguro
+        if salvar_dados_seguro(df, PLANILHA_PATH):
+            return True
+            
+        # Se falhar, tenta criar um backup de emergência
+        try:
+            backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            emergency_backup = os.path.join(backup_dir, f'clientes_emergency_{timestamp}.xlsx')
+            df.to_excel(emergency_backup, index=False)
+            print(f"Backup de emergência criado em: {emergency_backup}")
+        except Exception as e:
+            print(f"Erro ao criar backup de emergência: {str(e)}")
+            
+        return False
+    except Exception as e:
+        print(f"Erro ao salvar dados: {str(e)}")
+        return False
 
 def inicializar_usuarios():
     """Função para criar o arquivo de usuários se não existir"""
@@ -266,13 +350,13 @@ def adicionar():
             # Validação do campo Lead (obrigatório)
             origem_lead = request.form['origem_lead'].strip()
             if not origem_lead or origem_lead not in ['Whatsapp', 'Instagram', 'Facebook', 'Google', 'Indicação']:
-                return render_template('adicionar.html',
+                return render_template('adicionar.html', 
                     erro='Por favor, selecione uma origem válida para o lead.',
                     dados=request.form)
 
             # Validações opcionais
-            responsavel = request.form['responsavel'].strip().title() if request.form['responsavel'].strip() else ''
-            aluno = request.form['aluno'].strip().title() if request.form['aluno'].strip() else ''
+            responsavel = request.form['responsavel'].strip().title()
+            aluno = request.form['aluno'].strip().title()
             
             # Valida nome do responsável se fornecido
             if responsavel and not re.match(r'^[A-Za-zÀ-ÿ\s]{3,}$', responsavel):
@@ -335,7 +419,10 @@ def adicionar():
             }
             
             df = pd.concat([df, pd.DataFrame([dados])], ignore_index=True)
-            df.to_excel(PLANILHA_PATH, index=False)
+            if not salvar_dados(df):
+                return render_template('adicionar.html', 
+                    erro='Erro ao salvar os dados. Um backup de emergência foi criado na pasta backups.',
+                    dados=request.form)
             return render_template('adicionar.html', sucesso=True)
             
         except Exception as e:
@@ -434,7 +521,8 @@ def alterar_dados():
             df.loc[index, 'Tipo aluno'] = dados['tipo_aluno'].strip()
             
             # Salva as alterações
-            df.to_excel(PLANILHA_PATH, index=False)
+            if not salvar_dados(df):
+                return jsonify({'success': False, 'error': 'Erro ao salvar os dados. Um backup de emergência foi criado na pasta backups.'})
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
@@ -461,7 +549,8 @@ def excluir_lead():
         df = df.reset_index(drop=True)
         
         # Salva as alterações
-        df.to_excel(PLANILHA_PATH, index=False)
+        if not salvar_dados(df):
+            return jsonify({'success': False, 'error': 'Erro ao salvar os dados. Um backup de emergência foi criado na pasta backups.'})
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -549,115 +638,159 @@ def criar_backup():
 @requer_admin
 def exportar_pipedrive():
     try:
-        # Verifica se o token do Pipedrive está configurado
         if not PIPEDRIVE_API_TOKEN:
-            flash('Token do Pipedrive não configurado. Por favor, configure o token na variável PIPEDRIVE_API_TOKEN.', 'error')
+            flash('Token do Pipedrive não configurado.', 'error')
             return redirect(url_for('menu'))
 
-        df = pd.read_excel(PLANILHA_PATH)
-        total_leads = len(df)
+        db = Database()
+        leads = db.listar_leads()
+        
+        if not leads:
+            flash('Nenhum lead encontrado para exportar.', 'warning')
+            return redirect(url_for('menu'))
+
+        total_leads = len(leads)
         sucessos = 0
         falhas = 0
         detalhes_erros = []
 
-        # Testa a conexão com o Pipedrive
-        test_resp = requests.get(f'https://api.pipedrive.com/v1/users/me?api_token={PIPEDRIVE_API_TOKEN}')
-        if not test_resp.ok:
-            flash(f'Erro ao conectar com o Pipedrive: {test_resp.text}', 'error')
-            return redirect(url_for('menu'))
-
-        for index, row in df.iterrows():
+        for lead in leads:
             try:
-                # Limpa os dados antes de enviar
-                nome = str(row['Nome do aluno'] if pd.notna(row['Nome do aluno']) else row['Nome do responsável']).strip()
+                nome_aluno = lead.get('nome_aluno', '')
+                nome_responsavel = lead.get('nome_responsavel', '')
+                nome = str(nome_aluno if nome_aluno else nome_responsavel).strip()
                 if not nome:
                     nome = "Lead sem nome"
-                numero = str(row['Número']).strip()
+                
+                # Busca o telefone corretamente do banco
+                numero = str(lead.get('numero', '')).strip()
                 if not numero:
-                    detalhes_erros.append(f"Lead {index + 1} não tem número de telefone")
+                    detalhes_erros.append(f"Lead {nome_responsavel} não tem número de telefone")
                     falhas += 1
-                    print(f"[ERRO] Lead {index + 1}: número de telefone ausente. Dados: {row.to_dict()}")
                     continue
+                
+                # Remove formatação do número
+                numero = numero.replace('(', '').replace(')', '').replace('-', '').replace(' ', '')
+                
+                # Verifica se o número começa com 55 (código do Brasil)
+                if numero.startswith('55'):
+                    numero = numero[2:]
+                
+                # Verifica se o número começa com 27 (DDD)
+                if numero.startswith('27'):
+                    numero = numero[2:]
+                
+                # Verifica se o número começa com 9 (celular)
+                if numero.startswith('9'):
+                    numero = numero[1:]
+                
+                # Verifica se o número tem 8 dígitos (sem DDD e sem 9)
+                if len(numero) != 8:
+                    detalhes_erros.append(f"Lead {nome_responsavel} tem número de telefone inválido: {numero}")
+                    falhas += 1
+                    continue
+                
+                # Adiciona o código do país e DDD
+                numero = f"5527{numero}"
 
-                # Cria o lead (pessoa) no Pipedrive
+                # Cria a pessoa no Pipedrive
                 pessoa_payload = {
                     'name': nome,
-                    'phone': numero,
+                    'phone': [{
+                        'value': numero,
+                        'primary': True,
+                        'label': 'mobile'
+                    }]
                 }
-                print(f"[INFO] Enviando pessoa para Pipedrive: {pessoa_payload}")
-                pessoa_resp = requests.post(
-                    f'https://api.pipedrive.com/v1/persons?api_token={PIPEDRIVE_API_TOKEN}',
-                    json=pessoa_payload
-                )
-                print(f"[INFO] Resposta da criação de pessoa: {pessoa_resp.status_code} {pessoa_resp.text}")
+                pessoa_url = f'{PIPEDRIVE_API_URL}/persons?api_token={PIPEDRIVE_API_TOKEN}'
+                logger.info(f'Enviando pessoa_payload: {pessoa_payload}')
+                pessoa_resp = requests.post(pessoa_url, json=pessoa_payload)
                 pessoa_data = pessoa_resp.json()
+                logger.info(f'Resposta pessoa: {pessoa_data}')
+                
                 if not pessoa_data.get('success'):
-                    erro = f"Erro ao criar pessoa para lead {index + 1}: {pessoa_data.get('error', 'Erro desconhecido')}"
+                    erro = f"Erro ao criar pessoa para lead {nome_responsavel}: {pessoa_data.get('error', 'Erro desconhecido')}"
                     detalhes_erros.append(erro)
+                    logger.error(erro)
                     falhas += 1
                     continue
+                    
                 pessoa_id = pessoa_data['data']['id']
 
-                # Cria o lead com campos obrigatórios
+                # Formata a data atual no formato correto
+                data_atual = datetime.now().strftime("%Y-%m-%d")
+                
+                # Cria o lead no Pipedrive
                 lead_payload = {
                     'title': nome,
                     'person_id': pessoa_id,
-                    'expected_close_date': datetime.now().strftime("%Y-%m-%d"),
+                    'expected_close_date': data_atual,
                     'source': 'CRM',
                     'label_ids': [],
-                    'visible_to': '3',
-                    'add_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    'visible_to': 3,
+                    'add_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'value': 0,
+                    'expected_value': 0,
+                    'currency': 'BRL',
+                    'status': 'open'
                 }
-                print(f"[INFO] Enviando lead para Pipedrive: {lead_payload}")
-                lead_resp = requests.post(
-                    f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}',
-                    json=lead_payload
-                )
-                print(f"[INFO] Resposta da criação de lead: {lead_resp.status_code} {lead_resp.text}")
+                lead_url = f'{PIPEDRIVE_API_URL}/leads?api_token={PIPEDRIVE_API_TOKEN}'
+                logger.info(f'Enviando lead_payload: {lead_payload}')
+                lead_resp = requests.post(lead_url, json=lead_payload)
                 lead_data = lead_resp.json()
+                logger.info(f'Resposta lead: {lead_data}')
+                
                 if not lead_data.get('success'):
                     erro = f"Erro ao criar lead para pessoa {pessoa_id}: {lead_data.get('error', 'Erro desconhecido')}"
+                    if 'error_info' in lead_data:
+                        erro += f"\nDetalhes: {lead_data['error_info']}"
+                    logger.error(f'Payload que causou o erro: {lead_payload}')
+                    logger.error(f'Resposta completa da API: {lead_data}')
                     detalhes_erros.append(erro)
+                    logger.error(erro)
                     falhas += 1
                     continue
+                    
                 lead_id = lead_data['data']['id']
 
-                # Prepara os dados para a nota
+                # Adiciona nota com informações adicionais
                 nota_dados = {
-                    'Responsável': str(row['Nome do responsável']).strip() if pd.notna(row['Nome do responsável']) else 'N/A',
-                    'Idade do Aluno': str(row['Idade do aluno']).strip() if pd.notna(row['Idade do aluno']) else 'N/A',
-                    'Curso': str(row['Curso']).strip() if pd.notna(row['Curso']) else 'N/A',
-                    'Tipo de Aluno': str(row['Tipo aluno']).strip() if pd.notna(row['Tipo aluno']) else 'N/A',
-                    'Data AE': str(row['Data AE']).strip() if pd.notna(row['Data AE']) else 'N/A',
-                    'Hora AE': str(row['Hora planejada AE']).strip() if pd.notna(row['Hora planejada AE']) else 'N/A',
-                    'Chances de Fechar': str(row['Chances de fechar']).strip() if pd.notna(row['Chances de fechar']) else 'N/A',
-                    'Status da Ligação': str(row['Ligação']).strip() if pd.notna(row['Ligação']) else 'N/A',
-                    'Origem do Lead': str(row['Lead']).strip() if pd.notna(row['Lead']) else 'N/A',
-                    'Observações': str(row['Observação']).strip() if pd.notna(row['Observação']) else 'N/A'
+                    'Responsável': str(lead.get('nome_responsavel', '')).strip() or 'N/A',
+                    'Idade do Aluno': str(lead.get('idade_aluno', '')).strip() or 'N/A',
+                    'Curso': str(lead.get('curso', '')).strip() or 'N/A',
+                    'Tipo de Aluno': str(lead.get('tipo_aluno', '')).strip() or 'N/A',
+                    'Data AE': str(lead.get('data_ae', '')).strip() or 'N/A',
+                    'Hora AE': str(lead.get('hora_ae', '')).strip() or 'N/A',
+                    'Chances de Fechar': str(lead.get('chances_fechar', '')).strip() or 'N/A',
+                    'Status da Ligação': str(lead.get('ligacao', '')).strip() or 'N/A',
+                    'Origem do Lead': str(lead.get('origem_lead', '')).strip() or 'N/A',
+                    'Observações': str(lead.get('observacao', '')).strip() or 'N/A'
                 }
-                note = "\n".join([f"{k}: {v}" for k, v in nota_dados.items()])
+                note = "Informações do Lead:\n\n"
+                for key, value in nota_dados.items():
+                    if value != 'N/A':
+                        note += f"{key}: {value}\n"
                 note_payload = {
                     'content': note,
                     'lead_id': lead_id
                 }
-                print(f"[INFO] Enviando nota para Pipedrive: {note_payload}")
-                note_resp = requests.post(
-                    f'https://api.pipedrive.com/v1/notes?api_token={PIPEDRIVE_API_TOKEN}',
-                    json=note_payload
-                )
-                print(f"[INFO] Resposta da criação de nota: {note_resp.status_code} {note_resp.text}")
-                if note_resp.status_code in [200, 201]:
+                note_url = f'{PIPEDRIVE_API_URL}/notes?api_token={PIPEDRIVE_API_TOKEN}'
+                logger.info(f'Enviando note_payload: {note_payload}')
+                note_resp = requests.post(note_url, json=note_payload)
+                logger.info(f'Resposta note: {note_resp.text}')
+                if note_resp.status_code == 200:
                     sucessos += 1
                 else:
                     erro = f"Erro ao adicionar nota para lead {lead_id}: {note_resp.text}"
                     detalhes_erros.append(erro)
+                    logger.error(erro)
                     falhas += 1
 
             except Exception as e:
-                erro = f"Erro ao processar lead {index + 1}: {str(e)}"
+                erro = f"Erro ao processar lead {lead.get('nome_responsavel', 'desconhecido')}: {str(e)}"
                 detalhes_erros.append(erro)
+                logger.error(erro)
                 falhas += 1
-                print(f"[ERRO] Exceção ao processar lead {index + 1}: {str(e)}")
                 continue
 
         mensagem = f"""
@@ -672,6 +805,7 @@ Falhas: {falhas}
         flash(mensagem, 'success' if falhas == 0 else 'warning')
     except Exception as e:
         flash(f'Erro ao exportar para o Pipedrive: {str(e)}', 'error')
+        logger.error(f'Erro geral na exportação: {str(e)}')
     
     return redirect(url_for('menu'))
 

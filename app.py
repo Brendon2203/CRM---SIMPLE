@@ -1175,5 +1175,135 @@ def verificar_pipedrive():
         flash(f'Erro ao verificar dados no Pipedrive: {str(e)}', 'error')
         return redirect(url_for('menu'))
 
+@app.route('/filtro_dados', methods=['GET', 'POST'])
+@requer_admin
+def filtro_dados():
+    try:
+        if request.method == 'POST':
+            # Determina a fonte dos dados
+            fonte_dados = request.form.get('fonte_dados')
+            
+            if fonte_dados == 'arquivo':
+                if 'arquivo' not in request.files:
+                    flash('Nenhum arquivo selecionado', 'error')
+                    return redirect(request.url)
+                    
+                arquivo = request.files['arquivo']
+                if arquivo.filename == '':
+                    flash('Nenhum arquivo selecionado', 'error')
+                    return redirect(request.url)
+                    
+                if not arquivo.filename.endswith('.xlsx'):
+                    flash('Por favor, envie um arquivo Excel (.xlsx)', 'error')
+                    return redirect(request.url)
+                    
+                df = pd.read_excel(arquivo)
+            else:
+                df = pd.read_excel(PLANILHA_PATH)
+
+            # Aplicar filtros
+            filtros_aplicados = []
+            
+            # Filtro de faixa etária
+            faixa_etaria = request.form.get('faixa_etaria')
+            if faixa_etaria:
+                if faixa_etaria == '7-9':
+                    df = df[df['Idade do aluno'].between(7, 9)]
+                    filtros_aplicados.append('Idade: 7-9 anos')
+                elif faixa_etaria == '10-13':
+                    df = df[df['Idade do aluno'].between(10, 13)]
+                    filtros_aplicados.append('Idade: 10-13 anos')
+                elif faixa_etaria == '14-17':
+                    df = df[df['Idade do aluno'].between(14, 17)]
+                    filtros_aplicados.append('Idade: 14-17 anos')
+
+            # Filtro de tempo após contato
+            tempo_contato = request.form.get('tempo_contato')
+            if tempo_contato:
+                df['Data de contato'] = pd.to_datetime(df['Data de contato'], format='%d/%m/%Y', errors='coerce')
+                hoje = pd.Timestamp.now()
+                if tempo_contato == '1':
+                    df = df[df['Data de contato'] <= hoje - pd.DateOffset(months=1)]
+                    filtros_aplicados.append('Tempo: 1 mês após contato')
+                elif tempo_contato == '2':
+                    df = df[df['Data de contato'] <= hoje - pd.DateOffset(months=2)]
+                    filtros_aplicados.append('Tempo: 2 meses após contato')
+
+            # Filtro de chances de fechar
+            chances_fechar = request.form.get('chances_fechar')
+            if chances_fechar:
+                df = df[df['Chances de fechar'] == chances_fechar]
+                filtros_aplicados.append(f'Chances de fechar: {chances_fechar}')
+
+            # Filtro de tipo de aluno
+            tipo_aluno = request.form.get('tipo_aluno')
+            if tipo_aluno:
+                df = df[df['Tipo aluno'] == tipo_aluno]
+                filtros_aplicados.append(f'Tipo de aluno: {tipo_aluno}')
+
+            # Filtro de origem do lead
+            origem_lead = request.form.get('origem_lead')
+            if origem_lead:
+                df = df[df['Lead'] == origem_lead]
+                filtros_aplicados.append(f'Origem do lead: {origem_lead}')
+
+            # Filtro de nome
+            tem_nome = request.form.get('tem_nome')
+            if tem_nome:
+                if tem_nome == 'sim':
+                    df = df[df['Nome do responsável'].notna() & (df['Nome do responsável'] != '')]
+                    filtros_aplicados.append('Apenas com nome')
+                else:
+                    df = df[df['Nome do responsável'].isna() | (df['Nome do responsável'] == '')]
+                    filtros_aplicados.append('Apenas sem nome')
+
+            # Salvar resultado temporariamente
+            if not df.empty:
+                temp_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp', 'filtro_resultado.xlsx')
+                os.makedirs(os.path.dirname(temp_file), exist_ok=True)
+                df.to_excel(temp_file, index=False)
+                
+                session['ultimo_filtro'] = {
+                    'arquivo': temp_file,
+                    'filtros': filtros_aplicados,
+                    'total_registros': len(df)
+                }
+                
+                return render_template('resultado_filtro.html', 
+                                     df=df.to_dict('records'),
+                                     filtros=filtros_aplicados,
+                                     total_registros=len(df))
+            else:
+                flash('Nenhum registro encontrado com os filtros selecionados', 'warning')
+                return redirect(request.url)
+
+        # GET request - mostrar formulário
+        return render_template('filtro_dados.html')
+        
+    except Exception as e:
+        flash(f'Erro ao aplicar filtros: {str(e)}', 'error')
+        return redirect(url_for('menu'))
+
+@app.route('/baixar_filtro')
+@requer_admin
+def baixar_filtro():
+    try:
+        if 'ultimo_filtro' not in session:
+            flash('Nenhum resultado de filtro disponível para download', 'error')
+            return redirect(url_for('filtro_dados'))
+            
+        arquivo = session['ultimo_filtro']['arquivo']
+        if not os.path.exists(arquivo):
+            flash('Arquivo de resultado não encontrado', 'error')
+            return redirect(url_for('filtro_dados'))
+            
+        return send_file(arquivo, 
+                        as_attachment=True,
+                        download_name='resultado_filtro.xlsx')
+                        
+    except Exception as e:
+        flash(f'Erro ao baixar arquivo: {str(e)}', 'error')
+        return redirect(url_for('filtro_dados'))
+
 if __name__ == '__main__':
     app.run(debug=True)

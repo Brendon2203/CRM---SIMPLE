@@ -1,0 +1,148 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Filtro de Dados</h2>
+    <a href="{{ url_for('menu') }}" class="btn btn-primary">
+      <i class="bi bi-arrow-left"></i> Voltar ao Menu
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="POST" enctype="multipart/form-data">
+        <!-- Fonte dos dados -->
+        <div class="mb-4">
+          <h5>Fonte dos Dados</h5>
+          <div class="form-check">
+            <input
+              class="form-check-input"
+              type="radio"
+              name="fonte_dados"
+              id="banco_dados"
+              value="banco"
+              checked
+            />
+            <label class="form-check-label" for="banco_dados">
+              Usar banco de dados atual
+            </label>
+          </div>
+          <div class="form-check">
+            <input
+              class="form-check-input"
+              type="radio"
+              name="fonte_dados"
+              id="arquivo"
+              value="arquivo"
+            />
+            <label class="form-check-label" for="arquivo">
+              Enviar arquivo
+            </label>
+          </div>
+          <div id="arquivo_upload" class="mt-2 d-none">
+            <input
+              type="file"
+              class="form-control"
+              name="arquivo"
+              accept=".xlsx"
+            />
+          </div>
+        </div>
+
+        <div class="row">
+          <!-- Faixa Etária -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Faixa Etária</label>
+            <select class="form-select" name="faixa_etaria">
+              <option value="">Todas as idades</option>
+              <option value="7-9">7 a 9 anos</option>
+              <option value="10-13">10 a 13 anos</option>
+              <option value="14-17">14 a 17 anos</option>
+            </select>
+          </div>
+
+          <!-- Tempo após contato -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Tempo após contato</label>
+            <select class="form-select" name="tempo_contato">
+              <option value="">Qualquer tempo</option>
+              <option value="1">1 mês ou mais</option>
+              <option value="2">2 meses ou mais</option>
+            </select>
+          </div>
+
+          <!-- Chances de fechar -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Chances de fechar</label>
+            <select class="form-select" name="chances_fechar">
+              <option value="">Todas as chances</option>
+              <option value="Alta">Alta</option>
+              <option value="Média">Média</option>
+              <option value="Baixa">Baixa</option>
+            </select>
+          </div>
+
+          <!-- Tipo de aluno -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Tipo de aluno</label>
+            <select class="form-select" name="tipo_aluno">
+              <option value="">Todos os tipos</option>
+              <option value="cna">CNA</option>
+              <option value="ctrlplay">CTRL+PLAY</option>
+              <option value="desistente">Desistente</option>
+              <option value="sem_retorno">Sem retorno</option>
+            </select>
+          </div>
+
+          <!-- Origem do lead -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Origem do lead</label>
+            <select class="form-select" name="origem_lead">
+              <option value="">Todas as origens</option>
+              <option value="Whatsapp">WhatsApp</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Facebook">Facebook</option>
+              <option value="Google">Google</option>
+              <option value="Indicação">Indicação</option>
+            </select>
+          </div>
+
+          <!-- Tem nome -->
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Tem nome?</label>
+            <select class="form-select" name="tem_nome">
+              <option value="">Todos</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="text-center mt-4">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-filter"></i> Aplicar Filtros
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const radioArquivo = document.getElementById("arquivo");
+    const radioBanco = document.getElementById("banco_dados");
+    const divArquivo = document.getElementById("arquivo_upload");
+
+    function toggleArquivoUpload() {
+      if (radioArquivo.checked) {
+        divArquivo.classList.remove("d-none");
+      } else {
+        divArquivo.classList.add("d-none");
+      }
+    }
+
+    radioArquivo.addEventListener("change", toggleArquivoUpload);
+    radioBanco.addEventListener("change", toggleArquivoUpload);
+  });
+</script>
+{% endblock %}

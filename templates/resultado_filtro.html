@@ -1,0 +1,80 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Resultado do Filtro</h2>
+    <div>
+      <a href="{{ url_for('filtro_dados') }}" class="btn btn-secondary me-2">
+        <i class="bi bi-arrow-left"></i> Voltar aos Filtros
+      </a>
+      <a href="{{ url_for('baixar_filtro') }}" class="btn btn-primary">
+        <i class="bi bi-download"></i> Baixar Planilha
+      </a>
+    </div>
+  </div>
+
+  <!-- Resumo dos filtros aplicados -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">Filtros Aplicados</h5>
+    </div>
+    <div class="card-body">
+      {% if filtros %}
+      <ul class="list-unstyled mb-0">
+        {% for filtro in filtros %}
+        <li>
+          <i class="bi bi-check-circle-fill text-success me-2"></i>{{ filtro }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="mb-0">Nenhum filtro aplicado</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Resultados -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">Registros Encontrados ({{ total_registros }})</h5>
+    </div>
+    <div class="card-body">
+      {% if df %}
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Nome do Responsável</th>
+              <th>Número</th>
+              <th>Data de Contato</th>
+              <th>Nome do Aluno</th>
+              <th>Idade</th>
+              <th>Curso</th>
+              <th>Chances de Fechar</th>
+              <th>Lead</th>
+              <th>Tipo Aluno</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for registro in df %}
+            <tr>
+              <td>{{ registro['Nome do responsável'] }}</td>
+              <td>{{ registro['Número'] }}</td>
+              <td>{{ registro['Data de contato'] }}</td>
+              <td>{{ registro['Nome do aluno'] }}</td>
+              <td>{{ registro['Idade do aluno'] }}</td>
+              <td>{{ registro['Curso'] }}</td>
+              <td>{{ registro['Chances de fechar'] }}</td>
+              <td>{{ registro['Lead'] }}</td>
+              <td>{{ registro['Tipo aluno'] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>Nenhum registro encontrado.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

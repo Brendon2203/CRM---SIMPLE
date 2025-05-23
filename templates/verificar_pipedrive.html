@@ -1,0 +1,72 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-5">
+    <h2>Últimos Registros no Pipedrive</h2>
+    <a href="{{ url_for('menu') }}" class="btn btn-primary">
+      <i class="bi bi-arrow-left"></i> Voltar ao Menu
+    </a>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3>Últimas Pessoas Criadas</h3>
+    </div>
+    <div class="card-body">
+      {% if pessoas %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Telefone</th>
+              <th>Data de Criação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pessoa in pessoas %}
+            <tr>
+              <td>{{ pessoa.nome }}</td>
+              <td>{{ pessoa.telefone }}</td>
+              <td>{{ pessoa.data_criacao }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>Nenhuma pessoa encontrada.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Últimos Leads Criados</h3>
+    </div>
+    <div class="card-body">
+      {% if leads %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Título</th>
+              <th>Data de Criação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lead in leads %}
+            <tr>
+              <td>{{ lead.titulo }}</td>
+              <td>{{ lead.data_criacao }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>Nenhum lead encontrado.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -638,176 +638,129 @@ def criar_backup():
 @requer_admin
 def exportar_pipedrive():
     try:
+        # Verifica se o token do Pipedrive está configurado
         if not PIPEDRIVE_API_TOKEN:
-            flash('Token do Pipedrive não configurado.', 'error')
+            flash('Token do Pipedrive não configurado. Por favor, configure o token na variável PIPEDRIVE_API_TOKEN.', 'error')
             return redirect(url_for('menu'))
 
-        db = Database()
-        leads = db.listar_leads()
+        # Cria backup antes de exportar
+        backup_path = criar_backup()
         
-        if not leads:
-            flash('Nenhum lead encontrado para exportar.', 'warning')
-            return redirect(url_for('menu'))
-
-        total_leads = len(leads)
+        # Lê a planilha
+        df = pd.read_excel(PLANILHA_PATH)
+        
+        # Inicializa contadores
         sucessos = 0
         falhas = 0
+        ignorados = 0
         detalhes_erros = []
+        detalhes_ignorados = []
+        
+        # Headers para as requisições
+        headers = {
+            'accept': 'application/json',
+            'content-type': 'application/json'
+        }
 
-        for lead in leads:
+        # Itera sobre as linhas da planilha
+        for index, row in df.iterrows():
             try:
-                nome_aluno = lead.get('nome_aluno', '')
-                nome_responsavel = lead.get('nome_responsavel', '')
-                nome = str(nome_aluno if nome_aluno else nome_responsavel).strip()
-                if not nome:
-                    nome = "Lead sem nome"
+                # Validações
+                nome = str(row['Nome do responsável']) if pd.notna(row['Nome do responsável']) else ''
+                numero = str(row['Número']) if pd.notna(row['Número']) else ''
                 
-                # Busca o telefone corretamente do banco
-                numero = str(lead.get('numero', '')).strip()
-                if not numero:
-                    detalhes_erros.append(f"Lead {nome_responsavel} não tem número de telefone")
-                    falhas += 1
+                # Verifica se tem nome
+                if not nome or nome.strip() == '':
+                    detalhes_ignorados.append(f"Linha {index + 2}: Nome do responsável está vazio")
+                    ignorados += 1
                     continue
                 
-                # Remove formatação do número
-                numero = numero.replace('(', '').replace(')', '').replace('-', '').replace(' ', '')
-                
-                # Verifica se o número começa com 55 (código do Brasil)
-                if numero.startswith('55'):
-                    numero = numero[2:]
-                
-                # Verifica se o número começa com 27 (DDD)
-                if numero.startswith('27'):
-                    numero = numero[2:]
-                
-                # Verifica se o número começa com 9 (celular)
-                if numero.startswith('9'):
-                    numero = numero[1:]
-                
-                # Verifica se o número tem 8 dígitos (sem DDD e sem 9)
-                if len(numero) != 8:
-                    detalhes_erros.append(f"Lead {nome_responsavel} tem número de telefone inválido: {numero}")
-                    falhas += 1
+                # Verifica formato do número
+                if not re.match(r'^\(\d{2}\)[9]?\d{4}-\d{4}$', numero):
+                    detalhes_ignorados.append(f"Linha {index + 2}: Número de telefone '{numero}' em formato inválido")
+                    ignorados += 1
                     continue
-                
-                # Adiciona o código do país e DDD
-                numero = f"5527{numero}"
 
+                # Formata o número para o padrão internacional
+                numero_formatado = numero.replace('(', '').replace(')', '').replace('-', '').replace(' ', '')
+                if numero_formatado:
+                    numero_formatado = f'55{numero_formatado}'
+                
                 # Cria a pessoa no Pipedrive
                 pessoa_payload = {
                     'name': nome,
-                    'phone': [{
-                        'value': numero,
-                        'primary': True,
-                        'label': 'mobile'
-                    }]
+                    'phone': [{'value': numero_formatado, 'primary': True, 'label': 'mobile'}] if numero_formatado else []
                 }
-                pessoa_url = f'{PIPEDRIVE_API_URL}/persons?api_token={PIPEDRIVE_API_TOKEN}'
-                logger.info(f'Enviando pessoa_payload: {pessoa_payload}')
-                pessoa_resp = requests.post(pessoa_url, json=pessoa_payload)
-                pessoa_data = pessoa_resp.json()
-                logger.info(f'Resposta pessoa: {pessoa_data}')
                 
-                if not pessoa_data.get('success'):
-                    erro = f"Erro ao criar pessoa para lead {nome_responsavel}: {pessoa_data.get('error', 'Erro desconhecido')}"
+                pessoa_response = requests.post(
+                    f'https://api.pipedrive.com/v1/persons?api_token={PIPEDRIVE_API_TOKEN}',
+                    headers=headers,
+                    json=pessoa_payload
+                )
+                
+                if not pessoa_response.ok:
+                    erro = f"Erro ao criar pessoa {nome}: {pessoa_response.text}"
                     detalhes_erros.append(erro)
-                    logger.error(erro)
                     falhas += 1
                     continue
-                    
+                
+                pessoa_data = pessoa_response.json()
                 pessoa_id = pessoa_data['data']['id']
-
-                # Formata a data atual no formato correto
-                data_atual = datetime.now().strftime("%Y-%m-%d")
                 
                 # Cria o lead no Pipedrive
                 lead_payload = {
-                    'title': nome,
-                    'person_id': pessoa_id,
-                    'expected_close_date': data_atual,
-                    'source': 'CRM',
-                    'label_ids': [],
-                    'visible_to': 3,
-                    'add_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'value': 0,
-                    'expected_value': 0,
-                    'currency': 'BRL',
-                    'status': 'open'
+                    'title': f'Lead {nome}',
+                    'person_id': pessoa_id
                 }
-                lead_url = f'{PIPEDRIVE_API_URL}/leads?api_token={PIPEDRIVE_API_TOKEN}'
-                logger.info(f'Enviando lead_payload: {lead_payload}')
-                lead_resp = requests.post(lead_url, json=lead_payload)
-                lead_data = lead_resp.json()
-                logger.info(f'Resposta lead: {lead_data}')
                 
-                if not lead_data.get('success'):
-                    erro = f"Erro ao criar lead para pessoa {pessoa_id}: {lead_data.get('error', 'Erro desconhecido')}"
-                    if 'error_info' in lead_data:
-                        erro += f"\nDetalhes: {lead_data['error_info']}"
-                    logger.error(f'Payload que causou o erro: {lead_payload}')
-                    logger.error(f'Resposta completa da API: {lead_data}')
+                lead_response = requests.post(
+                    f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}',
+                    headers=headers,
+                    json=lead_payload
+                )
+                
+                if not lead_response.ok:
+                    erro = f"Erro ao criar lead para {nome}: {lead_response.text}"
                     detalhes_erros.append(erro)
-                    logger.error(erro)
                     falhas += 1
                     continue
-                    
-                lead_id = lead_data['data']['id']
-
-                # Adiciona nota com informações adicionais
-                nota_dados = {
-                    'Responsável': str(lead.get('nome_responsavel', '')).strip() or 'N/A',
-                    'Idade do Aluno': str(lead.get('idade_aluno', '')).strip() or 'N/A',
-                    'Curso': str(lead.get('curso', '')).strip() or 'N/A',
-                    'Tipo de Aluno': str(lead.get('tipo_aluno', '')).strip() or 'N/A',
-                    'Data AE': str(lead.get('data_ae', '')).strip() or 'N/A',
-                    'Hora AE': str(lead.get('hora_ae', '')).strip() or 'N/A',
-                    'Chances de Fechar': str(lead.get('chances_fechar', '')).strip() or 'N/A',
-                    'Status da Ligação': str(lead.get('ligacao', '')).strip() or 'N/A',
-                    'Origem do Lead': str(lead.get('origem_lead', '')).strip() or 'N/A',
-                    'Observações': str(lead.get('observacao', '')).strip() or 'N/A'
-                }
-                note = "Informações do Lead:\n\n"
-                for key, value in nota_dados.items():
-                    if value != 'N/A':
-                        note += f"{key}: {value}\n"
-                note_payload = {
-                    'content': note,
-                    'lead_id': lead_id
-                }
-                note_url = f'{PIPEDRIVE_API_URL}/notes?api_token={PIPEDRIVE_API_TOKEN}'
-                logger.info(f'Enviando note_payload: {note_payload}')
-                note_resp = requests.post(note_url, json=note_payload)
-                logger.info(f'Resposta note: {note_resp.text}')
-                if note_resp.status_code == 200:
-                    sucessos += 1
-                else:
-                    erro = f"Erro ao adicionar nota para lead {lead_id}: {note_resp.text}"
-                    detalhes_erros.append(erro)
-                    logger.error(erro)
-                    falhas += 1
-
+                
+                sucessos += 1
+                
             except Exception as e:
-                erro = f"Erro ao processar lead {lead.get('nome_responsavel', 'desconhecido')}: {str(e)}"
+                erro = f"Erro ao processar linha {index + 2}: {str(e)}"
                 detalhes_erros.append(erro)
-                logger.error(erro)
                 falhas += 1
                 continue
+        
+        # Prepara a mensagem de retorno
+        mensagem = f"""Exportação concluída!
+        
+Resultados:
+- Registros exportados com sucesso: {sucessos}
+- Registros ignorados (dados inválidos): {ignorados}
+- Falhas na exportação: {falhas}
+- Backup criado em: {backup_path}
 
-        mensagem = f"""
-Exportação concluída!
-Total de leads processados: {total_leads}
-Leads exportados com sucesso: {sucessos}
-Falhas: {falhas}
 """
+        if detalhes_ignorados:
+            mensagem += "\nRegistros ignorados:\n" + "\n".join(detalhes_ignorados)
+        
         if detalhes_erros:
-            mensagem += "\nDetalhes dos erros:\n" + "\n".join(detalhes_erros)
-
-        flash(mensagem, 'success' if falhas == 0 else 'warning')
+            mensagem += "\nErros encontrados:\n" + "\n".join(detalhes_erros)
+        
+        if sucessos > 0:
+            flash(mensagem, 'success')
+        elif ignorados > 0 and falhas == 0:
+            flash(mensagem, 'warning')
+        else:
+            flash(mensagem, 'error')
+            
+        return redirect(url_for('menu'))
+        
     except Exception as e:
-        flash(f'Erro ao exportar para o Pipedrive: {str(e)}', 'error')
-        logger.error(f'Erro geral na exportação: {str(e)}')
-    
-    return redirect(url_for('menu'))
+        flash(f'Erro durante a exportação: {str(e)}', 'error')
+        return redirect(url_for('menu'))
 
 @app.route('/importar_pipedrive')
 @requer_admin
@@ -1164,6 +1117,62 @@ def baixar_importacao():
         return send_file(temp.name, as_attachment=True, download_name='importacao_pipedrive.xlsx')
     except Exception as e:
         flash(f'Erro ao baixar planilha da importação: {str(e)}', 'error')
+        return redirect(url_for('menu'))
+
+@app.route('/verificar_pipedrive')
+@requer_admin
+def verificar_pipedrive():
+    try:
+        # Verifica se o token do Pipedrive está configurado
+        if not PIPEDRIVE_API_TOKEN:
+            flash('Token do Pipedrive não configurado.', 'error')
+            return redirect(url_for('menu'))
+
+        # Busca as últimas pessoas criadas
+        headers = {
+            'accept': 'application/json'
+        }
+        
+        # Busca pessoas
+        pessoas_response = requests.get(
+            f'https://api.pipedrive.com/v1/persons?api_token={PIPEDRIVE_API_TOKEN}&limit=5&sort=add_time%20DESC',
+            headers=headers
+        )
+        
+        # Busca leads
+        leads_response = requests.get(
+            f'https://api.pipedrive.com/v1/leads?api_token={PIPEDRIVE_API_TOKEN}&limit=5&sort=add_time%20DESC',
+            headers=headers
+        )
+
+        pessoas = []
+        leads = []
+        
+        if pessoas_response.ok:
+            data = pessoas_response.json()
+            if data.get('data'):
+                for pessoa in data['data']:
+                    pessoa_info = {
+                        'nome': pessoa.get('name', ''),
+                        'telefone': pessoa.get('phone', [{}])[0].get('value', '') if pessoa.get('phone') else '',
+                        'data_criacao': pessoa.get('add_time', '')
+                    }
+                    pessoas.append(pessoa_info)
+
+        if leads_response.ok:
+            data = leads_response.json()
+            if data.get('data'):
+                for lead in data['data']:
+                    lead_info = {
+                        'titulo': lead.get('title', ''),
+                        'data_criacao': lead.get('add_time', '')
+                    }
+                    leads.append(lead_info)
+
+        return render_template('verificar_pipedrive.html', pessoas=pessoas, leads=leads)
+        
+    except Exception as e:
+        flash(f'Erro ao verificar dados no Pipedrive: {str(e)}', 'error')
         return redirect(url_for('menu'))
 
 if __name__ == '__main__':

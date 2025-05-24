@@ -15,8 +15,8 @@ app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta'
 
 # Caminhos dos arquivos Excel
-PLANILHA_PATH = 'clientes.xlsx'
-USUARIOS_PATH = 'usuarios.xlsx'
+PLANILHA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clientes.xlsx')
+USUARIOS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'usuarios.xlsx')
 
 # Configurar locale para português
 try:
